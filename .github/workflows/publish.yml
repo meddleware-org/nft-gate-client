@@ -29,7 +29,13 @@ jobs:
       - name: Test
         run: npm test
 
-      - name: Publish
-        run: npm publish --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: Publish to npmjs (provenance via OIDC, idempotent)
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          HTTP=$(curl -s -o /dev/null -w "%{http_code}" \
+            "https://registry.npmjs.org/@meddleware%2fnft-gate-client/${VERSION}")
+          if [ "$HTTP" = "200" ]; then
+            echo "::notice::v${VERSION} already published to npmjs — skipping"
+          else
+            npm publish --provenance
+          fi
