@@ -11,6 +11,8 @@ export interface AccessGateConfig {
   packageId: string
   /** The shared `Gate` object ID. */
   gateId: string
+  /** The shared `PlatformConfig` object ID. Required for `buildPurchaseTx`. */
+  platformConfigId: string
   /**
    * Fully-qualified NFT type string to filter ownership by, e.g.
    * `<pkg>::access_gate::AccessNFT` or `<pkg>::access_gate::SoulboundAccessNFT`.

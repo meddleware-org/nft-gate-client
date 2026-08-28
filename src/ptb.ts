@@ -11,7 +11,7 @@ export function buildPurchaseTx(cfg: AccessGateConfig, priceMist: bigint | numbe
   const [payment] = tx.splitCoins(tx.gas, [tx.pure.u64(priceMist)])
   tx.moveCall({
     target: `${cfg.packageId}::access_gate::purchase`,
-    arguments: [tx.object(cfg.gateId), payment],
+    arguments: [tx.object(cfg.gateId), tx.object(cfg.platformConfigId), payment],
   })
   return tx
 }
@@ -48,6 +48,9 @@ export function buildCreateGateTx(
     defaultUses: bigint | number
     soulbound: boolean
     autoBurnAtZero: boolean
+    nftName: string
+    nftImageUrl: string
+    nftDescription: string
   },
 ): Transaction {
   const tx = new Transaction()
@@ -59,6 +62,9 @@ export function buildCreateGateTx(
       tx.pure.u64(opts.defaultUses),
       tx.pure.bool(opts.soulbound),
       tx.pure.bool(opts.autoBurnAtZero),
+      tx.pure.string(opts.nftName),
+      tx.pure.string(opts.nftImageUrl),
+      tx.pure.string(opts.nftDescription),
     ],
   })
   return tx

@@ -1,6 +1,6 @@
 {
   "name": "@meddleware/nft-gate-client",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "type": "module",
   "description": "Client-side helpers for the access_gate NFT access primitive: ownership queries, purchase/consume PTB builders, challenge signing, and access-proof assembly.",
   "author": "MeddleWare <meddleware@proton.me>",
