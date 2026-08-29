@@ -7,6 +7,8 @@
 
 export type {
   AccessGateConfig,
+  GateAdminContext,
+  OwnedGate,
   Challenge,
   AccessProof,
   OwnedAccessNft,
@@ -14,8 +16,33 @@ export type {
   SuiObjectClient,
 } from './types.js'
 
-export { fetchAccessNfts, ownsAccessNft, parseOwnedAccessNft, fetchAccessNftById } from './ownership.js'
-export { buildPurchaseTx, buildConsumeTx, buildCreateGateTx } from './ptb.js'
+export {
+  fetchAccessNfts,
+  ownsAccessNft,
+  parseOwnedAccessNft,
+  fetchAccessNftById,
+  parseAdminCap,
+  parseGate,
+  fetchAdminCaps,
+  fetchGate,
+  fetchOwnedGates,
+} from './ownership.js'
+export {
+  buildPurchaseTx,
+  buildConsumeTx,
+  buildCreateGateTx,
+  buildSetPriceTx,
+  buildSetPaymentRecipientTx,
+  buildSetPausedTx,
+  buildSetDefaultUsesTx,
+  buildSetSoulboundTx,
+  buildSetAutoBurnAtZeroTx,
+  buildSetNftNameTx,
+  buildSetNftImageUrlTx,
+  buildSetNftDescriptionTx,
+  buildAirdropTx,
+  buildMakeGateImmutableTx,
+} from './ptb.js'
 export { fetchChallenge } from './challenge.js'
 export {
   personalMessageForNonce,

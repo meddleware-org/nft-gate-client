@@ -38,6 +38,8 @@ export type PersonalMessageSigner = (message: Uint8Array) => Promise<{ signature
 /**
  * Sign a challenge and assemble the encoded access-proof token to hand to any gateway as its
  * auth bearer (e.g. an upload-relay client's auth-token option, an `Authorization` header).
+ *
+ * @throws {Error} if the wallet signer rejects or fails to sign the message.
  */
 export async function buildAccessProof(opts: {
   address: string

@@ -1,4 +1,4 @@
-import type { OwnedAccessNft, OwnedObjectsClient, SuiObjectClient } from './types.js'
+import type { OwnedAccessNft, OwnedGate, OwnedObjectsClient, SuiObjectClient } from './types.js'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -50,6 +50,8 @@ export function parseOwnedAccessNft(entry: any): OwnedAccessNft | null {
  * Typed single-object read of one access NFT by id (`getObject` with `showType`+`showContent`),
  * used when a UI needs the **exact** `usesRemaining` reliably rather than the best-effort parse
  * of an owned-objects page. Returns `null` if the object is missing or not an access NFT.
+ *
+ * @throws {Error} if the RPC call fails at the network or transport layer.
  */
 export async function fetchAccessNftById(
   client: SuiObjectClient,
@@ -65,6 +67,8 @@ export async function fetchAccessNftById(
 /**
  * Fetch all access NFTs of `nftType` owned by `owner`, optionally restricted to a specific
  * `gateId`. Uses `getOwnedObjects` filtered by `StructType` (the standard owned-objects query).
+ *
+ * @throws {Error} if the RPC call fails at the network or transport layer.
  */
 export async function fetchAccessNfts(
   client: OwnedObjectsClient,
@@ -87,6 +91,8 @@ export async function fetchAccessNfts(
  * True if `owner` holds at least one access NFT of `nftType` (optionally for `gateId`).
  * This is the cheap check a frontend runs to decide whether to show a gated option, and a
  * gateway runs (server-side) as part of access verification.
+ *
+ * @throws {Error} if the underlying RPC call fails.
  */
 export async function ownsAccessNft(
   client: OwnedObjectsClient,
@@ -96,4 +102,109 @@ export async function ownsAccessNft(
 ): Promise<boolean> {
   const nfts = await fetchAccessNfts(client, owner, nftType, gateId)
   return nfts.length > 0
+}
+
+// ── Gate discovery (operator management) ─────────────────────────────────────────
+// An operator holds an `AdminCap` per gate they administer. Discovery: list owned AdminCaps
+// (filtered by StructType), read each cap's `gate_id`, then fetch the shared `Gate` object.
+
+/** True if `type` names the `access_gate::AdminCap` struct. */
+function isAdminCapType(type: unknown): boolean {
+  return typeof type === 'string' && /::access_gate::AdminCap\b/.test(type)
+}
+
+/**
+ * Parse a single `getOwnedObjects`/`getObject` entry into `{ adminCapId, gateId }`, or `null` if
+ * it is not an `AdminCap`. Validates the object **type** when present and reads `fields.gate_id`.
+ */
+export function parseAdminCap(entry: any): { adminCapId: string; gateId: string } | null {
+  const obj = entry?.data ?? entry
+  const adminCapId: string | undefined = obj?.objectId ?? obj?.content?.fields?.id?.id
+  const type: unknown = obj?.type ?? obj?.content?.type
+  if (type !== undefined && !isAdminCapType(type)) return null
+  const gateId: string | undefined = obj?.content?.fields?.gate_id ?? obj?.content?.fields?.gateId
+  if (!adminCapId || !gateId) return null
+  return { adminCapId, gateId }
+}
+
+/**
+ * Parse a `getObject` entry for a `Gate` shared object into an {@link OwnedGate} (minus
+ * `adminCapId`, which comes from the owning cap). Returns `null` if the object is missing its
+ * expected `Gate` fields.
+ */
+export function parseGate(entry: any): Omit<OwnedGate, 'adminCapId'> | null {
+  const obj = entry?.data ?? entry
+  const gateId: string | undefined = obj?.objectId ?? obj?.content?.fields?.id?.id
+  const f = obj?.content?.fields
+  if (!gateId || !f) return null
+  return {
+    gateId,
+    priceMist: BigInt(f.price_mist ?? 0),
+    paymentRecipient: String(f.payment_recipient ?? ''),
+    defaultUses: BigInt(f.default_uses ?? 0),
+    soulbound: Boolean(f.soulbound),
+    autoBurnAtZero: Boolean(f.auto_burn_at_zero),
+    paused: Boolean(f.paused),
+    frozen: Boolean(f.frozen),
+    nftName: String(f.nft_name ?? ''),
+    nftImageUrl: String(f.nft_image_url ?? ''),
+    nftDescription: String(f.nft_description ?? ''),
+  }
+}
+
+/**
+ * List the `{ adminCapId, gateId }` pairs for every `access_gate::AdminCap` owned by `owner`
+ * under `packageId`. Uses `getOwnedObjects` filtered by `StructType` (the standard query).
+ *
+ * @throws {Error} if the underlying RPC call fails.
+ */
+export async function fetchAdminCaps(
+  client: OwnedObjectsClient,
+  owner: string,
+  packageId: string,
+): Promise<{ adminCapId: string; gateId: string }[]> {
+  const { data } = await client.getOwnedObjects({
+    owner,
+    filter: { StructType: `${packageId}::access_gate::AdminCap` },
+    options: { showContent: true, showType: true },
+  })
+  return (data ?? [])
+    .map(parseAdminCap)
+    .filter((c): c is { adminCapId: string; gateId: string } => c !== null)
+}
+
+/**
+ * Typed single-object read of one `Gate` by id, returning its parsed state (without `adminCapId`).
+ * Returns `null` if the object is missing or not a `Gate`.
+ *
+ * @throws {Error} if the RPC call fails at the network or transport layer.
+ */
+export async function fetchGate(
+  client: SuiObjectClient,
+  gateId: string,
+): Promise<Omit<OwnedGate, 'adminCapId'> | null> {
+  const res = await client.getObject({ id: gateId, options: { showType: true, showContent: true } })
+  return parseGate(res)
+}
+
+/**
+ * Fetch every gate `owner` administers: list their owned `AdminCap`s, then fetch each referenced
+ * `Gate` shared object and merge in the owning `adminCapId`. Gates whose object can no longer be
+ * read (e.g. deleted) are skipped.
+ *
+ * @throws {Error} if an underlying RPC call fails at the network or transport layer.
+ */
+export async function fetchOwnedGates(
+  client: OwnedObjectsClient & SuiObjectClient,
+  owner: string,
+  packageId: string,
+): Promise<OwnedGate[]> {
+  const caps = await fetchAdminCaps(client, owner, packageId)
+  const gates = await Promise.all(
+    caps.map(async ({ adminCapId, gateId }) => {
+      const gate = await fetchGate(client, gateId)
+      return gate ? { ...gate, adminCapId } : null
+    }),
+  )
+  return gates.filter((g): g is OwnedGate => g !== null)
 }

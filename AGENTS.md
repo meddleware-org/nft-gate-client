@@ -5,7 +5,7 @@
 | Field | Value |
 |---|---|
 | npm name | `@meddleware/nft-gate-client` |
-| Version | `0.0.1` |
+| Version | `0.0.3` |
 | Licence | 0BSD |
 | Type | TypeScript source package (no build step) |
 | Runtime targets | Node.js ≥22, browsers (via Vite) |

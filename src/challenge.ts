@@ -3,6 +3,9 @@ import type { Challenge } from './types.js'
 /**
  * Fetch a fresh challenge from a gateway's `GET /v1/challenge` endpoint. Tolerates both
  * `expiresAt` (camelCase) and `expires_at` (snake_case) response shapes.
+ *
+ * @throws {Error} if the network request fails or the gateway returns a non-2xx status.
+ * @throws {Error} if the response body is missing the required `nonce` field.
  */
 export async function fetchChallenge(
   gatewayHost: string,
