@@ -1,6 +1,18 @@
-import type { OwnedAccessNft, OwnedGate, OwnedObjectsClient, SuiObjectClient } from './types.js'
+import type { CoreObject, OwnedAccessNft, OwnedGate, OwnedObjectsClient, SuiObjectClient } from './types.js'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
+
+/**
+ * Unwrap a Move-struct field bag from a core `json` value. The gRPC/core API returns struct
+ * fields flat; the old JSON-RPC shape nested them under `.fields`. Tolerate both so parsing is
+ * robust to the transport and to the SDK's documented caveat that the `json` shape may vary.
+ */
+function structFields(v: unknown): Record<string, any> | undefined {
+  if (!v || typeof v !== 'object') return undefined
+  const o = v as Record<string, any>
+  const nested = o.fields
+  return nested && typeof nested === 'object' ? (nested as Record<string, any>) : o
+}
 
 /**
  * Extract `uses_remaining` from a Move enum `AccessVariant` as rendered by RPC, driven by the
@@ -25,18 +37,18 @@ function isAccessNftType(type: unknown): boolean {
 }
 
 /**
- * Parse a single `getOwnedObjects`/`getObject` entry into an {@link OwnedAccessNft}, or `null`
- * if it is not an access NFT. Validates the object **type** when present (typed), and reads the
- * nested `data.fields` deterministically.
+ * Parse a single core-API object (a `listOwnedObjects` item or a `getObject`'s `{ object }`) into
+ * an {@link OwnedAccessNft}, or `null` if it is not an access NFT. Validates the object **type**
+ * when present (typed), and reads the nested `data` fields deterministically.
  */
 export function parseOwnedAccessNft(entry: any): OwnedAccessNft | null {
-  const obj = entry?.data ?? entry
-  const objectId: string | undefined = obj?.objectId ?? obj?.content?.fields?.id?.id
-  const type: unknown = obj?.type ?? obj?.content?.type
+  const obj: CoreObject | undefined = entry?.object ?? entry
+  const objectId: string | undefined = obj?.objectId
+  const type: unknown = obj?.type
   // When the type is present it MUST be an access NFT; when absent (some node shapes) fall back
   // to structural checks below.
   if (type !== undefined && !isAccessNftType(type)) return null
-  const inner = obj?.content?.fields?.data?.fields
+  const inner = structFields(structFields(obj?.json)?.data)
   const gateId: string | undefined = inner?.gate_id ?? inner?.gateId
   if (!objectId || !gateId) return null
   return {
@@ -57,10 +69,7 @@ export async function fetchAccessNftById(
   client: SuiObjectClient,
   objectId: string,
 ): Promise<OwnedAccessNft | null> {
-  const res = await client.getObject({
-    id: objectId,
-    options: { showType: true, showContent: true },
-  })
+  const res = await client.core.getObject({ objectId, include: { json: true } })
   return parseOwnedAccessNft(res)
 }
 
@@ -76,12 +85,12 @@ export async function fetchAccessNfts(
   nftType: string,
   gateId?: string,
 ): Promise<OwnedAccessNft[]> {
-  const { data } = await client.getOwnedObjects({
+  const { objects } = await client.core.listOwnedObjects({
     owner,
-    filter: { StructType: nftType },
-    options: { showContent: true, showType: true },
+    type: nftType,
+    include: { json: true },
   })
-  const parsed = (data ?? [])
+  const parsed = (objects ?? [])
     .map(parseOwnedAccessNft)
     .filter((n): n is OwnedAccessNft => n !== null)
   return gateId ? parsed.filter((n) => n.gateId === gateId) : parsed
@@ -118,11 +127,12 @@ function isAdminCapType(type: unknown): boolean {
  * it is not an `AdminCap`. Validates the object **type** when present and reads `fields.gate_id`.
  */
 export function parseAdminCap(entry: any): { adminCapId: string; gateId: string } | null {
-  const obj = entry?.data ?? entry
-  const adminCapId: string | undefined = obj?.objectId ?? obj?.content?.fields?.id?.id
-  const type: unknown = obj?.type ?? obj?.content?.type
+  const obj: CoreObject | undefined = entry?.object ?? entry
+  const adminCapId: string | undefined = obj?.objectId
+  const type: unknown = obj?.type
   if (type !== undefined && !isAdminCapType(type)) return null
-  const gateId: string | undefined = obj?.content?.fields?.gate_id ?? obj?.content?.fields?.gateId
+  const f = structFields(obj?.json)
+  const gateId: string | undefined = f?.gate_id ?? f?.gateId
   if (!adminCapId || !gateId) return null
   return { adminCapId, gateId }
 }
@@ -133,9 +143,9 @@ export function parseAdminCap(entry: any): { adminCapId: string; gateId: string 
  * expected `Gate` fields.
  */
 export function parseGate(entry: any): Omit<OwnedGate, 'adminCapId'> | null {
-  const obj = entry?.data ?? entry
-  const gateId: string | undefined = obj?.objectId ?? obj?.content?.fields?.id?.id
-  const f = obj?.content?.fields
+  const obj: CoreObject | undefined = entry?.object ?? entry
+  const gateId: string | undefined = obj?.objectId
+  const f = structFields(obj?.json)
   if (!gateId || !f) return null
   return {
     gateId,
@@ -163,12 +173,12 @@ export async function fetchAdminCaps(
   owner: string,
   packageId: string,
 ): Promise<{ adminCapId: string; gateId: string }[]> {
-  const { data } = await client.getOwnedObjects({
+  const { objects } = await client.core.listOwnedObjects({
     owner,
-    filter: { StructType: `${packageId}::access_gate::AdminCap` },
-    options: { showContent: true, showType: true },
+    type: `${packageId}::access_gate::AdminCap`,
+    include: { json: true },
   })
-  return (data ?? [])
+  return (objects ?? [])
     .map(parseAdminCap)
     .filter((c): c is { adminCapId: string; gateId: string } => c !== null)
 }
@@ -183,7 +193,7 @@ export async function fetchGate(
   client: SuiObjectClient,
   gateId: string,
 ): Promise<Omit<OwnedGate, 'adminCapId'> | null> {
-  const res = await client.getObject({ id: gateId, options: { showType: true, showContent: true } })
+  const res = await client.core.getObject({ objectId: gateId, include: { json: true } })
   return parseGate(res)
 }
 

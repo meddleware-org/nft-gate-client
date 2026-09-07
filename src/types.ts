@@ -96,21 +96,33 @@ export interface OwnedAccessNft {
   usesRemaining: number | null
 }
 
-/** Minimal structural subset of a Sui client used for ownership queries (grpc or json-rpc). */
-export interface OwnedObjectsClient {
-  getOwnedObjects(params: {
-    owner: string
-    filter?: { StructType: string }
-    options?: { showContent?: boolean; showType?: boolean }
-    cursor?: string | null
-    limit?: number | null
-  }): Promise<{ data: unknown[]; hasNextPage?: boolean; nextCursor?: string | null }>
+/**
+ * A single owned/read object as returned by the unified core API (`SuiGrpcClient`): the id and
+ * Move struct type are top-level; the struct fields come back under `json` (opt-in). Kept as a
+ * structural subset so any client exposing the core API satisfies it without importing the SDK.
+ */
+export interface CoreObject {
+  objectId: string
+  type?: string
+  json?: Record<string, unknown> | null
 }
 
-/** Minimal structural subset of a Sui client used for a typed single-object read. */
+/** Minimal structural subset of a core Sui client used for owned-object listing (`SuiGrpcClient`). */
+export interface OwnedObjectsClient {
+  core: {
+    listOwnedObjects(options: {
+      owner: string
+      type?: string
+      cursor?: string | null
+      limit?: number
+      include?: { json?: boolean }
+    }): Promise<{ objects: CoreObject[]; hasNextPage: boolean; cursor: string | null }>
+  }
+}
+
+/** Minimal structural subset of a core Sui client used for a typed single-object read. */
 export interface SuiObjectClient {
-  getObject(params: {
-    id: string
-    options?: { showContent?: boolean; showType?: boolean }
-  }): Promise<unknown>
+  core: {
+    getObject(options: { objectId: string; include?: { json?: boolean } }): Promise<{ object: CoreObject }>
+  }
 }
