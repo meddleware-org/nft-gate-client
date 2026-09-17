@@ -9,3 +9,22 @@
 - **No secrets.** Auth tokens, keypairs, and wallet signers are caller-supplied at runtime. Never hardcode credentials.
 - **0BSD licence.** Do not change the licence.
 - **`@mysten/sui` is the only runtime dependency.** Keep it that way — no additional dependencies without strong justification.
+
+---
+
+## Deferred documentation — NOT for the `docs.` website (planned here per Part 0.4)
+
+> Captured for the future **`dev.meddleware.co.uk`** subdomain; excluded from the user-facing
+> `docs.` site. The Access Gate user docs cover buying/using passes, not building against the SDK.
+
+### `dev.` — developer integration (to write later)
+
+- **Full SDK reference** (TypeDoc target — ships `.d.ts`): the PTB builders (`create_gate`, `purchase`,
+  `consume`, airdrop/admin setters), ownership reads (`fetchOwnedGates`/`fetchGate`), and the
+  challenge/proof helpers.
+- **Wire-protocol spec:** the `nft-gate:access:<nonce>` personal-message prefix and base64(JSON) proof
+  token encoding — the canonical contract shared with **both** gateway implementations
+  (`meddleware-org/nft-gate`). This is the authoritative schema for the docs-site Access Gate
+  reference and for anyone verifying proofs.
+- **Config:** `AccessGateConfig` (`packageId`/`gateId`/`nftType`) — always caller-supplied; document
+  how to source each after deploying `access_gate`.

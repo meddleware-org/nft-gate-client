@@ -7,6 +7,7 @@
 
 export type {
   AccessGateConfig,
+  CoreObject,
   GateAdminContext,
   OwnedGate,
   Challenge,
