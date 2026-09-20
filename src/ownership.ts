@@ -27,8 +27,9 @@ function parseUsesRemaining(variant: any): number | null {
   const fields = variant.fields ?? variant
   const ur = fields?.uses_remaining ?? fields?.SingleUse?.uses_remaining
   if (ur != null) return Number(ur)
-  // Tagged SingleUse but the count is missing from this node's rendering — unknown, not a pass.
-  return tag === 'SingleUse' ? null : null
+  // Either an unknown tag, or a SingleUse whose count is missing from this node's rendering — in
+  // both cases the remaining count is unknown, so report null (never a fabricated 0).
+  return null
 }
 
 /** True if `type` names an `access_gate` NFT struct (transferable or soulbound). */

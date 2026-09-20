@@ -60,6 +60,23 @@ describe('proof', () => {
     expect(() => decodeAccessProof(bad)).not.toThrow()
   })
 
+  it('rejects an oversized token before parsing (size guard F3)', () => {
+    const oversized = 'A'.repeat(4097)
+    expect(() => decodeAccessProof(oversized)).toThrow(/too large/)
+  })
+
+  it('rejects a non-ASCII field to enforce the gateway ASCII contract', () => {
+    // encode is UTF-8-safe (does not corrupt), but decode enforces the ASCII contract both
+    // gateways rely on, so a non-ASCII nonce/address is rejected rather than silently diverging.
+    const token = encodeAccessProof({ address: '0x1', nonce: 'nönce', signature: 'sig' })
+    expect(() => decodeAccessProof(token)).toThrow(/non-ASCII/)
+  })
+
+  it('produces btoa-identical base64 for ASCII payloads (wire-compatible)', () => {
+    const proof = { address: '0xabc', nonce: 'GOLDEN-NONCE-123', signature: 'U0lH' }
+    expect(encodeAccessProof(proof)).toBe(btoa(JSON.stringify(proof)))
+  })
+
   it('builds a proof by signing the challenge message', async () => {
     const sign = vi.fn(async (message: Uint8Array) => {
       expect(new TextDecoder().decode(message)).toBe('nft-gate:access:xyz')
