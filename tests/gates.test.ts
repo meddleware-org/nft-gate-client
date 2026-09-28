@@ -67,7 +67,26 @@ describe('gate discovery (gRPC core API)', () => {
       nftName: 'Test Pass',
       nftImageUrl: 'https://x/y.png',
       nftDescription: 'desc',
+      policy: { freezeRequiresUnpaused: false, lockCommissionOnFreeze: false, pauseBlocksDecryption: false },
+      lockedCommissionBps: null,
     })
+  })
+
+  it('parseGate reads a gate policy and a locked commission snapshot', () => {
+    const g = parseGate(
+      gateObj(GATE_A, {
+        frozen: true,
+        policy: { freeze_requires_unpaused: true, lock_commission_on_freeze: true, pause_blocks_decryption: false },
+        locked_commission_bps: '25',
+      }),
+    )
+    expect(g?.policy).toEqual({ freezeRequiresUnpaused: true, lockCommissionOnFreeze: true, pauseBlocksDecryption: false })
+    expect(g?.lockedCommissionBps).toBe(25n)
+  })
+
+  it('parseGate accepts the JSON-RPC Option shape for locked_commission_bps', () => {
+    expect(parseGate(gateObj(GATE_A, { locked_commission_bps: { vec: ['30'] } }))?.lockedCommissionBps).toBe(30n)
+    expect(parseGate(gateObj(GATE_A, { locked_commission_bps: { vec: [] } }))?.lockedCommissionBps).toBeNull()
   })
 
   it('parseGate returns null when fields are missing', () => {

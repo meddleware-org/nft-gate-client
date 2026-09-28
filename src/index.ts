@@ -9,6 +9,7 @@ export type {
   AccessGateConfig,
   CoreObject,
   GateAdminContext,
+  GatePolicy,
   OwnedGate,
   Challenge,
   AccessProof,
@@ -29,6 +30,11 @@ export {
   fetchOwnedGates,
 } from './ownership.js'
 export {
+  DEFAULT_GATE_POLICY,
+  isRestrictivePolicy,
+  BPS_DENOMINATOR,
+  minimumProfitablePriceMist,
+  commissionForPrice,
   buildPurchaseTx,
   buildConsumeTx,
   buildCreateGateTx,

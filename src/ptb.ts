@@ -1,5 +1,17 @@
 import { Transaction } from '@mysten/sui/transactions'
-import type { AccessGateConfig, GateAdminContext } from './types.js'
+import type { AccessGateConfig, GateAdminContext, GatePolicy } from './types.js'
+
+/** The unrestricted policy — every restriction off (what `create_gate` applies on-chain). */
+export const DEFAULT_GATE_POLICY: Readonly<GatePolicy> = Object.freeze({
+  freezeRequiresUnpaused: false,
+  lockCommissionOnFreeze: false,
+  pauseBlocksDecryption: false,
+})
+
+/** True if `policy` enables any restriction. */
+export function isRestrictivePolicy(policy: GatePolicy): boolean {
+  return policy.freezeRequiresUnpaused || policy.lockCommissionOnFreeze || policy.pauseBlocksDecryption
+}
 
 /**
  * Build a PTB that purchases access: split `priceMist` from the gas coin and call
@@ -39,6 +51,10 @@ export function buildConsumeTx(
 /**
  * Build a PTB that creates a new gate. Mostly for tooling/operators; the frontend usually
  * only purchases/consumes an existing gate.
+ *
+ * With no `policy` (or the all-`false` default) this calls `create_gate`, which every package
+ * version supports. A restrictive `policy` builds a `GatePolicy` with `new_gate_policy` and calls
+ * `create_gate_with_policy` — available only in package versions that include gate policies.
  */
 export function buildCreateGateTx(
   packageId: string,
@@ -51,22 +67,34 @@ export function buildCreateGateTx(
     nftName: string
     nftImageUrl: string
     nftDescription: string
+    /** Immutable restrictions for this gate; omit (or all-false) for the unrestricted default. */
+    policy?: GatePolicy
   },
 ): Transaction {
   const tx = new Transaction()
-  tx.moveCall({
-    target: `${packageId}::access_gate::create_gate`,
+  const args = [
+    tx.pure.u64(opts.priceMist),
+    tx.pure.address(opts.paymentRecipient),
+    tx.pure.u64(opts.defaultUses),
+    tx.pure.bool(opts.soulbound),
+    tx.pure.bool(opts.autoBurnAtZero),
+    tx.pure.string(opts.nftName),
+    tx.pure.string(opts.nftImageUrl),
+    tx.pure.string(opts.nftDescription),
+  ]
+  if (!opts.policy || !isRestrictivePolicy(opts.policy)) {
+    tx.moveCall({ target: `${packageId}::access_gate::create_gate`, arguments: args })
+    return tx
+  }
+  const [policy] = tx.moveCall({
+    target: `${packageId}::access_gate::new_gate_policy`,
     arguments: [
-      tx.pure.u64(opts.priceMist),
-      tx.pure.address(opts.paymentRecipient),
-      tx.pure.u64(opts.defaultUses),
-      tx.pure.bool(opts.soulbound),
-      tx.pure.bool(opts.autoBurnAtZero),
-      tx.pure.string(opts.nftName),
-      tx.pure.string(opts.nftImageUrl),
-      tx.pure.string(opts.nftDescription),
+      tx.pure.bool(opts.policy.freezeRequiresUnpaused),
+      tx.pure.bool(opts.policy.lockCommissionOnFreeze),
+      tx.pure.bool(opts.policy.pauseBlocksDecryption),
     ],
   })
+  tx.moveCall({ target: `${packageId}::access_gate::create_gate_with_policy`, arguments: [...args, policy] })
   return tx
 }
 
@@ -147,13 +175,40 @@ export function buildAirdropTx(ctx: GateAdminContext, recipient: string): Transa
  * Make the gate immutable — **irreversible**. Consumes the `AdminCap` (passed by value) and sets
  * `Gate.frozen = true`, permanently ending all setters and `airdrop`. `purchase`/`consume` remain
  * permissionless. Grant everything first, then freeze.
+ *
+ * Requires the package's shared `PlatformConfig` (the commission snapshot for gates whose policy
+ * has `lockCommissionOnFreeze`). Aborts `E_FREEZE_WHILE_PAUSED` (10) if the gate is paused and its
+ * policy has `freezeRequiresUnpaused`. Package versions that predate gate policies take no
+ * `PlatformConfig` argument — target a policy-aware package with this builder.
  */
-export function buildMakeGateImmutableTx(ctx: GateAdminContext): Transaction {
+export function buildMakeGateImmutableTx(ctx: GateAdminContext, platformConfigId: string): Transaction {
   const tx = new Transaction()
   tx.moveCall({
     target: `${ctx.packageId}::access_gate::make_gate_immutable`,
-    // cap is consumed by value; gate is &mut.
-    arguments: [tx.object(ctx.adminCapId), tx.object(ctx.gateId)],
+    // cap is consumed by value; gate is &mut; platform is read for the commission snapshot.
+    arguments: [tx.object(ctx.adminCapId), tx.object(ctx.gateId), tx.object(platformConfigId)],
   })
   return tx
+}
+
+// ── Commission helpers (read-only arithmetic mirroring the contract) ──────────────────────────
+
+/** Basis-point denominator used by `access_gate` commission maths. */
+export const BPS_DENOMINATOR = 10_000n
+
+/**
+ * The smallest non-zero gate price at which the platform commission is at least 1 MIST — the
+ * contract rounds commission down, so any lower non-zero price pays no commission at all.
+ * `⌈10000 / commissionBps⌉` (500 MIST at the default 20 bps). Returns `0n` when `commissionBps`
+ * is 0 (no price is commission-bearing).
+ */
+export function minimumProfitablePriceMist(commissionBps: bigint | number): bigint {
+  const bps = BigInt(commissionBps)
+  if (bps <= 0n) return 0n
+  return (BPS_DENOMINATOR + bps - 1n) / bps
+}
+
+/** Commission (MIST) the contract takes on `priceMist` at `commissionBps` (rounded down). */
+export function commissionForPrice(priceMist: bigint | number, commissionBps: bigint | number): bigint {
+  return (BigInt(priceMist) * BigInt(commissionBps)) / BPS_DENOMINATOR
 }

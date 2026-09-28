@@ -1,4 +1,4 @@
-import type { CoreObject, OwnedAccessNft, OwnedGate, OwnedObjectsClient, SuiObjectClient } from './types.js'
+import type { CoreObject, GatePolicy, OwnedAccessNft, OwnedGate, OwnedObjectsClient, SuiObjectClient } from './types.js'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -160,7 +160,30 @@ export function parseGate(entry: any): Omit<OwnedGate, 'adminCapId'> | null {
     nftName: String(f.nft_name ?? ''),
     nftImageUrl: String(f.nft_image_url ?? ''),
     nftDescription: String(f.nft_description ?? ''),
+    policy: parsePolicy(f.policy),
+    lockedCommissionBps: parseOptionU64(f.locked_commission_bps),
   }
+}
+
+/** Parse an on-chain `GatePolicy` (absent on package versions that predate policies → all false). */
+function parsePolicy(v: unknown): GatePolicy {
+  const p = structFields(v)
+  return {
+    freezeRequiresUnpaused: Boolean(p?.freeze_requires_unpaused),
+    lockCommissionOnFreeze: Boolean(p?.lock_commission_on_freeze),
+    pauseBlocksDecryption: Boolean(p?.pause_blocks_decryption),
+  }
+}
+
+/** Parse a Move `Option<u64>` as rendered by gRPC (value | null) or JSON-RPC (`{ vec: [v] }`). */
+function parseOptionU64(v: unknown): bigint | null {
+  if (v === null || v === undefined) return null
+  if (typeof v === 'object') {
+    const vec = (v as { vec?: unknown[] }).vec
+    if (Array.isArray(vec)) return vec.length ? BigInt(vec[0] as string) : null
+    return null
+  }
+  return BigInt(v as string)
 }
 
 /**

@@ -14,6 +14,10 @@ import {
   buildSetNftDescriptionTx,
   buildAirdropTx,
   buildMakeGateImmutableTx,
+  DEFAULT_GATE_POLICY,
+  isRestrictivePolicy,
+  minimumProfitablePriceMist,
+  commissionForPrice,
 } from '../src/ptb.js'
 import type { AccessGateConfig, GateAdminContext } from '../src/types.js'
 
@@ -75,6 +79,56 @@ describe('ptb builders', () => {
     // 8 inputs: price, recipient, defaultUses, soulbound, autoBurnAtZero, nftName, nftImageUrl, nftDescription
     const inputRefs = json.match(/"Input":\d+/g) ?? []
     expect(inputRefs.length).toBe(8)
+    expect(json).not.toContain('create_gate_with_policy')
+  })
+
+  const gateOpts = {
+    priceMist: 500n,
+    paymentRecipient: RECIPIENT,
+    defaultUses: 1n,
+    soulbound: false,
+    autoBurnAtZero: true,
+    nftName: 'Pass',
+    nftImageUrl: 'https://example.com/i.png',
+    nftDescription: 'd',
+  }
+
+  it('buildCreateGateTx keeps create_gate for the all-false default policy', () => {
+    const json = commandsJson(buildCreateGateTx(PKG, { ...gateOpts, policy: DEFAULT_GATE_POLICY }))
+    expect(json).toContain('"function":"create_gate"')
+    expect(json).not.toContain('new_gate_policy')
+  })
+
+  it('buildCreateGateTx builds a GatePolicy and calls create_gate_with_policy when restricted', () => {
+    const tx = buildCreateGateTx(PKG, {
+      ...gateOpts,
+      policy: { freezeRequiresUnpaused: true, lockCommissionOnFreeze: false, pauseBlocksDecryption: true },
+    })
+    const json = commandsJson(tx)
+    expect(json).toContain('"function":"new_gate_policy"')
+    expect(json).toContain('"function":"create_gate_with_policy"')
+    // 8 gate inputs + 3 policy flags; the policy itself is the first result of command 0.
+    expect((json.match(/"Input":\d+/g) ?? []).length).toBe(11)
+    expect(json).toContain('"NestedResult":[0,0]')
+  })
+})
+
+describe('policy + commission helpers', () => {
+  it('isRestrictivePolicy is false only for the all-false policy', () => {
+    expect(isRestrictivePolicy(DEFAULT_GATE_POLICY)).toBe(false)
+    expect(isRestrictivePolicy({ ...DEFAULT_GATE_POLICY, lockCommissionOnFreeze: true })).toBe(true)
+  })
+
+  it('minimumProfitablePriceMist is the smallest price with non-zero commission', () => {
+    expect(minimumProfitablePriceMist(20)).toBe(500n)
+    expect(minimumProfitablePriceMist(30n)).toBe(334n)
+    expect(minimumProfitablePriceMist(1000)).toBe(10n)
+    expect(minimumProfitablePriceMist(0)).toBe(0n)
+    for (const bps of [1n, 7n, 20n, 30n, 333n, 1000n]) {
+      const min = minimumProfitablePriceMist(bps)
+      expect(commissionForPrice(min, bps)).toBeGreaterThanOrEqual(1n)
+      expect(commissionForPrice(min - 1n, bps)).toBe(0n)
+    }
   })
 })
 
@@ -94,7 +148,7 @@ describe('gate-admin PTB builders', () => {
     { name: 'buildSetNftImageUrlTx', fn: 'set_nft_image_url', tx: () => buildSetNftImageUrlTx(adminCtx, 'https://x/y.png'), inputs: 3 },
     { name: 'buildSetNftDescriptionTx', fn: 'set_nft_description', tx: () => buildSetNftDescriptionTx(adminCtx, 'desc'), inputs: 3 },
     { name: 'buildAirdropTx', fn: 'airdrop', tx: () => buildAirdropTx(adminCtx, RECIPIENT), inputs: 3 },
-    { name: 'buildMakeGateImmutableTx', fn: 'make_gate_immutable', tx: () => buildMakeGateImmutableTx(adminCtx), inputs: 2 },
+    { name: 'buildMakeGateImmutableTx', fn: 'make_gate_immutable', tx: () => buildMakeGateImmutableTx(adminCtx, PLATFORM), inputs: 3 },
   ]
 
   for (const c of cases) {

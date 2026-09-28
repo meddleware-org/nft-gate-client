@@ -64,9 +64,32 @@ Build a transaction to purchase an access NFT. Caller signs and executes with th
 
 Build a transaction to consume (burn) a single-use access NFT, proving use. Submit before calling `buildAccessProof` with the resulting `consumeDigest`.
 
-**`buildCreateGateTx(config): Transaction`**
+**`buildCreateGateTx(packageId, opts): Transaction`**
 
-Build a transaction to create a new access gate on-chain (admin operation).
+Build a transaction to create a new access gate on-chain (admin operation). `opts.policy` is an
+optional `GatePolicy` — immutable restrictions a tool's operator applies to the gates it creates:
+
+| Flag | Effect |
+| --- | --- |
+| `freezeRequiresUnpaused` | `make_gate_immutable` aborts (code 10) while the gate is paused. |
+| `lockCommissionOnFreeze` | Freezing snapshots the platform commission; frozen purchases use it. |
+| `pauseBlocksDecryption` | Seal `nft_gate` (and other honouring policies) deny access while paused. |
+
+With no policy (or `DEFAULT_GATE_POLICY`, all `false`) the builder calls `create_gate`, which every
+package version supports; a restrictive policy calls `new_gate_policy` + `create_gate_with_policy`,
+which need a policy-aware package.
+
+**`buildMakeGateImmutableTx(ctx, platformConfigId): Transaction`**
+
+Irreversibly freeze a gate (consumes its `AdminCap`). Passes the shared `PlatformConfig` for the
+commission snapshot. The other admin setters (`buildSetPriceTx`, `buildSetPausedTx`, …,
+`buildAirdropTx`) take a `GateAdminContext`.
+
+**`minimumProfitablePriceMist(commissionBps): bigint`** / **`commissionForPrice(price, bps): bigint`**
+
+Commission arithmetic mirroring the contract (rounds down). `minimumProfitablePriceMist` is
+`⌈10000 / commissionBps⌉` — the smallest non-zero price that yields at least 1 MIST of commission
+(500 MIST at 20 bps); tools can use it as their minimum gate price.
 
 ### Challenge & Proof
 

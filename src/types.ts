@@ -37,6 +37,20 @@ export interface GateAdminContext {
   adminCapId: string
 }
 
+/**
+ * Operator-selectable restrictions stored immutably on a gate at creation (`GatePolicy` on-chain).
+ * Every flag is `false` by default (the unrestricted behaviour). A tool's operator chooses which to
+ * apply to the gates it creates; buyers can read them from the gate.
+ */
+export interface GatePolicy {
+  /** `make_gate_immutable` aborts while the gate is paused (no permanently unsellable frozen gates). */
+  freezeRequiresUnpaused: boolean
+  /** Freezing snapshots the platform commission; frozen purchases use the snapshot. */
+  lockCommissionOnFreeze: boolean
+  /** Dependent access policies (e.g. Seal `nft_gate`) deny access while the gate is paused. */
+  pauseBlocksDecryption: boolean
+}
+
 /** A gate an operator administers, parsed from its on-chain `Gate` object + owning `AdminCap`. */
 export interface OwnedGate {
   /** The shared `Gate` object ID. */
@@ -63,6 +77,10 @@ export interface OwnedGate {
   nftImageUrl: string
   /** Default NFT description minted into future NFTs. */
   nftDescription: string
+  /** Immutable restrictions (all `false` for gates of package versions that predate policies). */
+  policy: GatePolicy
+  /** Commission snapshot taken at freeze (when `policy.lockCommissionOnFreeze`), else `null`. */
+  lockedCommissionBps: bigint | null
 }
 
 /** A server-issued, time-bound challenge the wallet signs to prove control of an address. */

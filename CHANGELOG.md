@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- `GatePolicy` type, `DEFAULT_GATE_POLICY` and `isRestrictivePolicy`; `buildCreateGateTx` accepts an optional `policy` and calls `create_gate_with_policy` when it restricts anything (otherwise `create_gate`, unchanged).
+- `OwnedGate.policy` and `OwnedGate.lockedCommissionBps`, parsed by `parseGate` (all-false / `null` for gates of package versions without policies).
+- `minimumProfitablePriceMist`, `commissionForPrice` and `BPS_DENOMINATOR` — commission arithmetic mirroring the contract.
+
+### Changed
+
+- **Breaking:** `buildMakeGateImmutableTx(ctx, platformConfigId)` passes the shared `PlatformConfig`, matching the policy-aware `make_gate_immutable` ABI. Target a policy-aware `access_gate` package.
+
 ## [0.0.8] - 2026-09-17
 
 ### Added
