@@ -35,6 +35,8 @@ export interface GateAdminContext {
   gateId: string
   /** The `AdminCap` object ID authorised over `gateId` (held by the operator). */
   adminCapId: string
+  /** The package's shared `PlatformConfig` (read by set-price, airdrop, make-free and freeze). */
+  platformConfigId: string
 }
 
 /**
@@ -47,8 +49,28 @@ export interface GatePolicy {
   freezeRequiresUnpaused: boolean
   /** Freezing snapshots the platform commission; frozen purchases use the snapshot. */
   lockCommissionOnFreeze: boolean
-  /** Dependent access policies (e.g. Seal `nft_gate`) deny access while the gate is paused. */
+  /** Dependent decryption policies (Seal `nft_gate`) deny access while the gate is paused. */
   pauseBlocksDecryption: boolean
+  /** While paused, `consume` aborts and access gateways deny holders. */
+  pauseBlocksAccess: boolean
+}
+
+/** A commission rule: `max(price × bps / 10000, minMist)`, capped at 10% of the price. */
+export interface CommissionTerms {
+  bps: bigint
+  minMist: bigint
+}
+
+/** An `access_gate` package's shared `PlatformConfig`. */
+export interface PlatformConfigInfo {
+  /** Receives commissions and fees. */
+  treasury: string
+  /** Commission in basis points (≤ 1000). */
+  commissionBps: bigint
+  /** Floor on a paid mint's commission (MIST). */
+  minCommissionMist: bigint
+  /** One-off fee (MIST) to make a gate free. */
+  freeGateFeeMist: bigint
 }
 
 /** A gate an operator administers, parsed from its on-chain `Gate` object + owning `AdminCap`. */
@@ -79,8 +101,10 @@ export interface OwnedGate {
   nftDescription: string
   /** Immutable restrictions (all `false` for gates of package versions that predate policies). */
   policy: GatePolicy
-  /** Commission snapshot taken at freeze (when `policy.lockCommissionOnFreeze`), else `null`. */
-  lockedCommissionBps: bigint | null
+  /** Commission terms snapshotted at freeze (when `policy.lockCommissionOnFreeze`), else `null`. */
+  lockedCommission: CommissionTerms | null
+  /** True once the free-gate fee has been paid (the price may then be 0). */
+  freeFeePaid: boolean
 }
 
 /** A server-issued, time-bound challenge the wallet signs to prove control of an address. */

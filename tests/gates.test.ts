@@ -3,7 +3,7 @@ import {
   parseAdminCap,
   parseGate,
   parsePlatformConfig,
-  fetchPlatformCommission,
+  fetchPlatformConfig,
   fetchAdminCaps,
   fetchGate,
   fetchOwnedGates,
@@ -69,26 +69,30 @@ describe('gate discovery (gRPC core API)', () => {
       nftName: 'Test Pass',
       nftImageUrl: 'https://x/y.png',
       nftDescription: 'desc',
-      policy: { freezeRequiresUnpaused: false, lockCommissionOnFreeze: false, pauseBlocksDecryption: false },
-      lockedCommissionBps: null,
+      policy: { freezeRequiresUnpaused: false, lockCommissionOnFreeze: false, pauseBlocksDecryption: false, pauseBlocksAccess: false },
+      lockedCommission: null,
+      freeFeePaid: false,
     })
   })
 
-  it('parseGate reads a gate policy and a locked commission snapshot', () => {
+  it('parseGate reads a gate policy, locked commission terms and the free-fee flag', () => {
     const g = parseGate(
       gateObj(GATE_A, {
         frozen: true,
-        policy: { freeze_requires_unpaused: true, lock_commission_on_freeze: true, pause_blocks_decryption: false },
-        locked_commission_bps: '25',
+        policy: { freeze_requires_unpaused: true, lock_commission_on_freeze: true, pause_blocks_decryption: false, pause_blocks_access: true },
+        locked_commission: { bps: '20', min_mist: '1000000' },
+        free_fee_paid: true,
       }),
     )
-    expect(g?.policy).toEqual({ freezeRequiresUnpaused: true, lockCommissionOnFreeze: true, pauseBlocksDecryption: false })
-    expect(g?.lockedCommissionBps).toBe(25n)
+    expect(g?.policy).toEqual({ freezeRequiresUnpaused: true, lockCommissionOnFreeze: true, pauseBlocksDecryption: false, pauseBlocksAccess: true })
+    expect(g?.lockedCommission).toEqual({ bps: 20n, minMist: 1_000_000n })
+    expect(g?.freeFeePaid).toBe(true)
   })
 
-  it('parseGate accepts the JSON-RPC Option shape for locked_commission_bps', () => {
-    expect(parseGate(gateObj(GATE_A, { locked_commission_bps: { vec: ['30'] } }))?.lockedCommissionBps).toBe(30n)
-    expect(parseGate(gateObj(GATE_A, { locked_commission_bps: { vec: [] } }))?.lockedCommissionBps).toBeNull()
+  it('parseGate accepts the JSON-RPC Option shape for locked_commission', () => {
+    const vec = { vec: [{ fields: { bps: '30', min_mist: '5' } }] }
+    expect(parseGate(gateObj(GATE_A, { locked_commission: vec }))?.lockedCommission).toEqual({ bps: 30n, minMist: 5n })
+    expect(parseGate(gateObj(GATE_A, { locked_commission: { vec: [] } }))?.lockedCommission).toBeNull()
   })
 
   it('parseGate returns null when fields are missing', () => {
@@ -154,19 +158,25 @@ describe('PlatformConfig commission', () => {
   const cfgObj: CoreObject = {
     objectId: '0xcfg',
     type: `${PKG}::access_gate::PlatformConfig`,
-    json: { id: { id: '0xcfg' }, treasury: '0xtreasury', commission_bps: '20' },
+    json: {
+      id: { id: '0xcfg' },
+      treasury: '0xtreasury',
+      commission_bps: '20',
+      min_commission_mist: '1000000',
+      free_gate_fee_mist: '100000000',
+    },
   }
 
-  it('parsePlatformConfig reads treasury + commission (bare or { object })', () => {
-    const want = { treasury: '0xtreasury', commissionBps: 20n }
+  it('parsePlatformConfig reads treasury, commission terms and free-gate fee (bare or { object })', () => {
+    const want = { treasury: '0xtreasury', commissionBps: 20n, minCommissionMist: 1_000_000n, freeGateFeeMist: 100_000_000n }
     expect(parsePlatformConfig(cfgObj)).toEqual(want)
     expect(parsePlatformConfig({ object: cfgObj })).toEqual(want)
     expect(parsePlatformConfig({ objectId: '0xcfg' })).toBeNull()
   })
 
-  it('fetchPlatformCommission requests json for the given object', async () => {
+  it('fetchPlatformConfig requests json for the given object', async () => {
     const getObject = vi.fn(async () => ({ object: cfgObj }))
-    const res = await fetchPlatformCommission({ core: { getObject } }, '0xcfg')
+    const res = await fetchPlatformConfig({ core: { getObject } }, '0xcfg')
     expect(getObject).toHaveBeenCalledWith({ objectId: '0xcfg', include: { json: true } })
     expect(res?.commissionBps).toBe(20n)
   })

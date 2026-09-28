@@ -1,4 +1,13 @@
-import type { CoreObject, GatePolicy, OwnedAccessNft, OwnedGate, OwnedObjectsClient, SuiObjectClient } from './types.js'
+import type {
+  CommissionTerms,
+  CoreObject,
+  GatePolicy,
+  OwnedAccessNft,
+  OwnedGate,
+  OwnedObjectsClient,
+  PlatformConfigInfo,
+  SuiObjectClient,
+} from './types.js'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -161,7 +170,8 @@ export function parseGate(entry: any): Omit<OwnedGate, 'adminCapId'> | null {
     nftImageUrl: String(f.nft_image_url ?? ''),
     nftDescription: String(f.nft_description ?? ''),
     policy: parsePolicy(f.policy),
-    lockedCommissionBps: parseOptionU64(f.locked_commission_bps),
+    lockedCommission: parseOptionTerms(f.locked_commission),
+    freeFeePaid: Boolean(f.free_fee_paid),
   }
 }
 
@@ -172,18 +182,21 @@ function parsePolicy(v: unknown): GatePolicy {
     freezeRequiresUnpaused: Boolean(p?.freeze_requires_unpaused),
     lockCommissionOnFreeze: Boolean(p?.lock_commission_on_freeze),
     pauseBlocksDecryption: Boolean(p?.pause_blocks_decryption),
+    pauseBlocksAccess: Boolean(p?.pause_blocks_access),
   }
 }
 
-/** Parse a Move `Option<u64>` as rendered by gRPC (value | null) or JSON-RPC (`{ vec: [v] }`). */
-function parseOptionU64(v: unknown): bigint | null {
-  if (v === null || v === undefined) return null
-  if (typeof v === 'object') {
-    const vec = (v as { vec?: unknown[] }).vec
-    if (Array.isArray(vec)) return vec.length ? BigInt(vec[0] as string) : null
-    return null
-  }
-  return BigInt(v as string)
+/**
+ * Parse a Move `Option<CommissionTerms>` as rendered by gRPC (struct | null) or JSON-RPC
+ * (`{ vec: [struct] }`).
+ */
+function parseOptionTerms(v: unknown): CommissionTerms | null {
+  if (v === null || v === undefined || typeof v !== 'object') return null
+  const vec = (v as { vec?: unknown[] }).vec
+  const inner = Array.isArray(vec) ? vec[0] : v
+  const t = structFields(inner)
+  if (!t || t.bps === undefined || t.min_mist === undefined) return null
+  return { bps: BigInt(t.bps as string), minMist: BigInt(t.min_mist as string) }
 }
 
 /**
@@ -221,31 +234,30 @@ export async function fetchGate(
   return parseGate(res)
 }
 
-/** The commission settings of an `access_gate` package's shared `PlatformConfig`. */
-export interface PlatformCommission {
-  /** Platform treasury receiving the commission. */
-  treasury: string
-  /** Commission in basis points (≤ 1000) applied to every purchase of an unlocked gate. */
-  commissionBps: bigint
-}
-
 /** Parse a `PlatformConfig` object (gRPC `{ object }` or a bare core object); `null` if malformed. */
-export function parsePlatformConfig(res: { object?: CoreObject } | CoreObject | null | undefined): PlatformCommission | null {
+export function parsePlatformConfig(
+  res: { object?: CoreObject } | CoreObject | null | undefined,
+): PlatformConfigInfo | null {
   const obj = res && 'object' in res ? res.object : (res as CoreObject | null | undefined)
   const f = structFields(obj?.json)
   if (!f || f.commission_bps === undefined || f.treasury === undefined) return null
-  return { treasury: String(f.treasury), commissionBps: BigInt(f.commission_bps as string) }
+  return {
+    treasury: String(f.treasury),
+    commissionBps: BigInt(f.commission_bps as string),
+    minCommissionMist: BigInt((f.min_commission_mist ?? 0) as string),
+    freeGateFeeMist: BigInt((f.free_gate_fee_mist ?? 0) as string),
+  }
 }
 
 /**
- * Read the live commission from a package's shared `PlatformConfig`.
+ * Read a package's shared `PlatformConfig` (treasury, commission terms, free-gate fee).
  *
  * @throws {Error} if the RPC call fails at the network or transport layer.
  */
-export async function fetchPlatformCommission(
+export async function fetchPlatformConfig(
   client: SuiObjectClient,
   platformConfigId: string,
-): Promise<PlatformCommission | null> {
+): Promise<PlatformConfigInfo | null> {
   return parsePlatformConfig(await client.core.getObject({ objectId: platformConfigId, include: { json: true } }))
 }
 

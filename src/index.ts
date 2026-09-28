@@ -10,6 +10,8 @@ export type {
   CoreObject,
   GateAdminContext,
   GatePolicy,
+  CommissionTerms,
+  PlatformConfigInfo,
   OwnedGate,
   Challenge,
   AccessProof,
@@ -29,15 +31,17 @@ export {
   fetchGate,
   fetchOwnedGates,
   parsePlatformConfig,
-  fetchPlatformCommission,
+  fetchPlatformConfig,
 } from './ownership.js'
-export type { PlatformCommission } from './ownership.js'
 export {
   DEFAULT_GATE_POLICY,
   isRestrictivePolicy,
   BPS_DENOMINATOR,
-  minimumProfitablePriceMist,
+  MAX_COMMISSION_BPS,
+  platformCommissionTerms,
   commissionForPrice,
+  minimumPaidPriceMist,
+  gateCommissionMist,
   buildPurchaseTx,
   buildConsumeTx,
   buildCreateGateTx,
@@ -51,6 +55,7 @@ export {
   buildSetNftImageUrlTx,
   buildSetNftDescriptionTx,
   buildAirdropTx,
+  buildMakeGateFreeTx,
   buildMakeGateImmutableTx,
 } from './ptb.js'
 export { fetchChallenge } from './challenge.js'

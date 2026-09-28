@@ -7,16 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Targets the policy-aware `access_gate` (testnet `0x1a81ca17…eea4`); packages that predate it are not
+supported by the admin builders.
+
 ### Added
 
-- `GatePolicy` type, `DEFAULT_GATE_POLICY` and `isRestrictivePolicy`; `buildCreateGateTx` accepts an optional `policy` and calls `create_gate_with_policy` when it restricts anything (otherwise `create_gate`, unchanged).
-- `OwnedGate.policy` and `OwnedGate.lockedCommissionBps`, parsed by `parseGate` (all-false / `null` for gates of package versions without policies).
-- `fetchPlatformCommission` / `parsePlatformConfig` (`PlatformCommission` type) — read the live commission from a `PlatformConfig`.
-- `minimumProfitablePriceMist`, `commissionForPrice` and `BPS_DENOMINATOR` — commission arithmetic mirroring the contract.
+- `GatePolicy` (`freezeRequiresUnpaused`, `lockCommissionOnFreeze`, `pauseBlocksDecryption`, `pauseBlocksAccess`), `DEFAULT_GATE_POLICY`, `isRestrictivePolicy`.
+- `buildMakeGateFreeTx(ctx, feeMist)`.
+- `fetchPlatformConfig` / `parsePlatformConfig` (`PlatformConfigInfo`), `CommissionTerms`, `commissionForPrice`, `minimumPaidPriceMist`, `gateCommissionMist`, `platformCommissionTerms`, `BPS_DENOMINATOR`, `MAX_COMMISSION_BPS`.
+- `OwnedGate.policy`, `.lockedCommission` and `.freeFeePaid`, parsed by `parseGate`.
 
 ### Changed
 
-- **Breaking:** `buildMakeGateImmutableTx(ctx, platformConfigId)` passes the shared `PlatformConfig`, matching the policy-aware `make_gate_immutable` ABI. Target a policy-aware `access_gate` package.
+- **Breaking:** `GateAdminContext` gains `platformConfigId`; `buildSetPriceTx`, `buildMakeGateImmutableTx` pass it.
+- **Breaking:** `buildCreateGateTx(packageId, platformConfigId, opts)` always sends a `GatePolicy`; price 0 calls `create_free_gate` with `opts.freeGateFeeMist`.
+- **Breaking:** `buildAirdropTx(ctx, recipient, commissionMist)` pays the airdrop commission.
 
 ## [0.0.8] - 2026-09-17
 

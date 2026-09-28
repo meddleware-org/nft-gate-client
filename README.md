@@ -68,36 +68,33 @@ challenge nonce; ≥ 8 bytes). Calls `consume` or `consume_soulbound` from `conf
 exhausted pass is deleted if the gate auto-burns, otherwise kept. Execute it before calling
 `buildAccessProof` with the resulting `consumeDigest`.
 
-**`buildCreateGateTx(packageId, opts): Transaction`**
+**`buildCreateGateTx(packageId, platformConfigId, opts): Transaction`**
 
-Build a transaction to create a new access gate on-chain (admin operation). `opts.policy` is an
-optional `GatePolicy` — immutable restrictions a tool's operator applies to the gates it creates:
+Build a transaction to create a new access gate (admin operation). A paid gate (`priceMist > 0`)
+calls `create_gate`; its price must be at least the platform minimum (`minimumPaidPriceMist`). A
+free gate (`priceMist == 0`) calls `create_free_gate` and pays `opts.freeGateFeeMist` (the
+platform's `freeGateFeeMist`) from gas. `opts.policy` is an optional `GatePolicy` — immutable
+restrictions a tool's operator applies to the gates it creates:
 
 | Flag | Effect |
 | --- | --- |
 | `freezeRequiresUnpaused` | `make_gate_immutable` aborts (code 10) while the gate is paused. |
-| `lockCommissionOnFreeze` | Freezing snapshots the platform commission; frozen purchases use it. |
-| `pauseBlocksDecryption` | Seal `nft_gate` (and other honouring policies) deny access while paused. |
+| `lockCommissionOnFreeze` | Freezing snapshots the platform commission terms; frozen mints use them. |
+| `pauseBlocksDecryption` | Seal `nft_gate` denies decryption while paused. |
+| `pauseBlocksAccess` | While paused, `consume` aborts and nft-gate gateways deny holders. |
 
-With no policy (or `DEFAULT_GATE_POLICY`, all `false`) the builder calls `create_gate`, which every
-package version supports; a restrictive policy calls `new_gate_policy` + `create_gate_with_policy`,
-which need a policy-aware package.
+**Admin builders** take a `GateAdminContext` (`{ packageId, gateId, adminCapId, platformConfigId }`):
+`buildSetPriceTx`, `buildSetPaymentRecipientTx`, `buildSetPausedTx`, `buildSetDefaultUsesTx`,
+`buildSetSoulboundTx`, `buildSetAutoBurnAtZeroTx`, `buildSetNftNameTx`, `buildSetNftImageUrlTx`,
+`buildSetNftDescriptionTx`, `buildAirdropTx(ctx, recipient, commissionMist)` (the admin pays the
+commission a purchase would carry), `buildMakeGateFreeTx(ctx, feeMist)` and
+`buildMakeGateImmutableTx(ctx)` (irreversible; consumes the `AdminCap`).
 
-**`buildMakeGateImmutableTx(ctx, platformConfigId): Transaction`**
-
-Irreversibly freeze a gate (consumes its `AdminCap`). Passes the shared `PlatformConfig` for the
-commission snapshot. The other admin setters (`buildSetPriceTx`, `buildSetPausedTx`, …,
-`buildAirdropTx`) take a `GateAdminContext`.
-
-**`minimumProfitablePriceMist(commissionBps): bigint`** / **`commissionForPrice(price, bps): bigint`**
-
-Commission arithmetic mirroring the contract (rounds down). `minimumProfitablePriceMist` is
-`⌈10000 / commissionBps⌉` — the smallest non-zero price that yields at least 1 MIST of commission
-(500 MIST at 20 bps); tools can use it as their minimum gate price.
-
-**`fetchPlatformCommission(client, platformConfigId): Promise<PlatformCommission | null>`**
-
-Read `{ treasury, commissionBps }` from a package's shared `PlatformConfig`.
+**Platform terms and commission** — `fetchPlatformConfig(client, platformConfigId)` returns
+`{ treasury, commissionBps, minCommissionMist, freeGateFeeMist }`. The helpers mirror the contract:
+`commissionForPrice(price, terms)` = `max(price × bps / 10000, minMist)`, never more than 10% of the
+price; `minimumPaidPriceMist(minCommissionMist)` = 10 × the floor; `gateCommissionMist(gate,
+platform)` applies a frozen gate's locked terms.
 
 ### Challenge & Proof
 
