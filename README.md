@@ -20,7 +20,7 @@ import {
   buildAccessProof, personalMessageForNonce,      // challenge signing + proof token
 } from '@meddleware/nft-gate-client'
 
-const cfg = { packageId, gateId, nftType, soulbound: true }
+const cfg = { packageId, gateId, platformConfigId, nftType, soulbound: true }
 
 // 1. Check whether the connected wallet has access:
 const hasAccess = await ownsAccessNft(suiClient, address, cfg.nftType, cfg.gateId)
@@ -28,8 +28,9 @@ const hasAccess = await ownsAccessNft(suiClient, address, cfg.nftType, cfg.gateI
 // 2. Purchase access if not:
 const tx = buildPurchaseTx(cfg, priceMist)       // wallet signs & executes
 
-// 3. Prove access to a gateway (single-use: submit buildConsumeTx first):
+// 3. Prove access to a gateway (single-use gateways: consume first, bound to the challenge nonce):
 const challenge = await fetchChallenge(gatewayHost)
+// const { digest: consumeDigest } = await exec(buildConsumeTx(cfg, nftId, challenge.nonce))
 const token = await buildAccessProof({ address, challenge, sign, consumeDigest })
 // pass `token` as the relay/gateway Authorization: Bearer header
 ```
@@ -60,9 +61,12 @@ Parse a raw `SuiObjectResponse` into an `OwnedAccessNft`. Returns `null` if the 
 
 Build a transaction to purchase an access NFT. Caller signs and executes with their wallet.
 
-**`buildConsumeTx(config, nftObjectId): Transaction`**
+**`buildConsumeTx(config, nftObjectId, nonce): Transaction`**
 
-Build a transaction to consume (burn) a single-use access NFT, proving use. Submit before calling `buildAccessProof` with the resulting `consumeDigest`.
+Build a transaction that spends one use of a single-use pass, bound to `nonce` (the gateway's
+challenge nonce; ≥ 8 bytes). Calls `consume` or `consume_soulbound` from `config.soulbound`. An
+exhausted pass is deleted if the gate auto-burns, otherwise kept. Execute it before calling
+`buildAccessProof` with the resulting `consumeDigest`.
 
 **`buildCreateGateTx(packageId, opts): Transaction`**
 
@@ -131,6 +135,7 @@ This format is verified by both the Rust gateway and the Cloudflare Workers gate
 interface AccessGateConfig {
   packageId: string
   gateId: string
+  platformConfigId: string // the package's shared PlatformConfig (commission)
   nftType: string
   soulbound: boolean
 }
