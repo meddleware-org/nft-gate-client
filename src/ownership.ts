@@ -221,6 +221,34 @@ export async function fetchGate(
   return parseGate(res)
 }
 
+/** The commission settings of an `access_gate` package's shared `PlatformConfig`. */
+export interface PlatformCommission {
+  /** Platform treasury receiving the commission. */
+  treasury: string
+  /** Commission in basis points (≤ 1000) applied to every purchase of an unlocked gate. */
+  commissionBps: bigint
+}
+
+/** Parse a `PlatformConfig` object (gRPC `{ object }` or a bare core object); `null` if malformed. */
+export function parsePlatformConfig(res: { object?: CoreObject } | CoreObject | null | undefined): PlatformCommission | null {
+  const obj = res && 'object' in res ? res.object : (res as CoreObject | null | undefined)
+  const f = structFields(obj?.json)
+  if (!f || f.commission_bps === undefined || f.treasury === undefined) return null
+  return { treasury: String(f.treasury), commissionBps: BigInt(f.commission_bps as string) }
+}
+
+/**
+ * Read the live commission from a package's shared `PlatformConfig`.
+ *
+ * @throws {Error} if the RPC call fails at the network or transport layer.
+ */
+export async function fetchPlatformCommission(
+  client: SuiObjectClient,
+  platformConfigId: string,
+): Promise<PlatformCommission | null> {
+  return parsePlatformConfig(await client.core.getObject({ objectId: platformConfigId, include: { json: true } }))
+}
+
 /**
  * Fetch every gate `owner` administers: list their owned `AdminCap`s, then fetch each referenced
  * `Gate` shared object and merge in the owning `adminCapId`. Gates whose object can no longer be

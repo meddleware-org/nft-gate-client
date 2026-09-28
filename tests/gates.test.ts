@@ -2,6 +2,8 @@ import { describe, it, expect, vi } from 'vitest'
 import {
   parseAdminCap,
   parseGate,
+  parsePlatformConfig,
+  fetchPlatformCommission,
   fetchAdminCaps,
   fetchGate,
   fetchOwnedGates,
@@ -145,5 +147,27 @@ describe('gate discovery (gRPC core API)', () => {
       },
     }
     expect(await fetchOwnedGates(client, '0xowner', PKG)).toEqual([])
+  })
+})
+
+describe('PlatformConfig commission', () => {
+  const cfgObj: CoreObject = {
+    objectId: '0xcfg',
+    type: `${PKG}::access_gate::PlatformConfig`,
+    json: { id: { id: '0xcfg' }, treasury: '0xtreasury', commission_bps: '20' },
+  }
+
+  it('parsePlatformConfig reads treasury + commission (bare or { object })', () => {
+    const want = { treasury: '0xtreasury', commissionBps: 20n }
+    expect(parsePlatformConfig(cfgObj)).toEqual(want)
+    expect(parsePlatformConfig({ object: cfgObj })).toEqual(want)
+    expect(parsePlatformConfig({ objectId: '0xcfg' })).toBeNull()
+  })
+
+  it('fetchPlatformCommission requests json for the given object', async () => {
+    const getObject = vi.fn(async () => ({ object: cfgObj }))
+    const res = await fetchPlatformCommission({ core: { getObject } }, '0xcfg')
+    expect(getObject).toHaveBeenCalledWith({ objectId: '0xcfg', include: { json: true } })
+    expect(res?.commissionBps).toBe(20n)
   })
 })

@@ -28,7 +28,10 @@ export {
   fetchAdminCaps,
   fetchGate,
   fetchOwnedGates,
+  parsePlatformConfig,
+  fetchPlatformCommission,
 } from './ownership.js'
+export type { PlatformCommission } from './ownership.js'
 export {
   DEFAULT_GATE_POLICY,
   isRestrictivePolicy,

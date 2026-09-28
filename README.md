@@ -91,6 +91,10 @@ Commission arithmetic mirroring the contract (rounds down). `minimumProfitablePr
 `⌈10000 / commissionBps⌉` — the smallest non-zero price that yields at least 1 MIST of commission
 (500 MIST at 20 bps); tools can use it as their minimum gate price.
 
+**`fetchPlatformCommission(client, platformConfigId): Promise<PlatformCommission | null>`**
+
+Read `{ treasury, commissionBps }` from a package's shared `PlatformConfig`.
+
 ### Challenge & Proof
 
 **`fetchChallenge(gatewayHost, opts?): Promise<Challenge>`**

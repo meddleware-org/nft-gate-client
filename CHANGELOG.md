@@ -11,6 +11,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - `GatePolicy` type, `DEFAULT_GATE_POLICY` and `isRestrictivePolicy`; `buildCreateGateTx` accepts an optional `policy` and calls `create_gate_with_policy` when it restricts anything (otherwise `create_gate`, unchanged).
 - `OwnedGate.policy` and `OwnedGate.lockedCommissionBps`, parsed by `parseGate` (all-false / `null` for gates of package versions without policies).
+- `fetchPlatformCommission` / `parsePlatformConfig` (`PlatformCommission` type) — read the live commission from a `PlatformConfig`.
 - `minimumProfitablePriceMist`, `commissionForPrice` and `BPS_DENOMINATOR` — commission arithmetic mirroring the contract.
 
 ### Changed
