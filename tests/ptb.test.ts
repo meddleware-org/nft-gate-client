@@ -1,4 +1,6 @@
 import { describe, it, expect } from 'vitest'
+import { bcs } from '@mysten/sui/bcs'
+import { toBase64 } from '@mysten/sui/utils'
 import {
   buildPurchaseTx,
   buildConsumeTx,
@@ -176,5 +178,118 @@ describe('gate-admin PTB builders', () => {
     for (const tx of [buildSetPriceTx(adminCtx, 10_000_000n), buildAirdropTx(adminCtx, RECIPIENT, 0n), buildMakeGateFreeTx(adminCtx, 0n), buildMakeGateImmutableTx(adminCtx)]) {
       expect(commandsJson(tx)).toContain(PLATFORM.slice(2))
     }
+  })
+})
+
+// ── Exact argument values and order ──────────────────────────────────────────────
+// Each move-call argument is resolved to `obj:<id>`, `pure:<base64 BCS>`, `result:<cmd>` or
+// `gas`, so a swapped or mis-typed argument fails here instead of aborting on-chain.
+type TxData = {
+  inputs: Array<{ UnresolvedObject?: { objectId: string }; Object?: unknown; Pure?: { bytes: string } }>
+  commands: Array<{ MoveCall?: { function: string; arguments: Array<Record<string, unknown>> } }>
+}
+
+function callArgs(tx: { getData: () => unknown }, fn: string): string[] {
+  const data = tx.getData() as TxData
+  const call = data.commands.find((c) => c.MoveCall?.function === fn)?.MoveCall
+  if (!call) throw new Error(`no move call ${fn}`)
+  return call.arguments.map((a) => {
+    if (typeof a.Input === 'number') {
+      const input = data.inputs[a.Input]
+      if (input.UnresolvedObject) return `obj:${input.UnresolvedObject.objectId}`
+      if (input.Pure) return `pure:${input.Pure.bytes}`
+      return 'input:?'
+    }
+    if (Array.isArray(a.NestedResult)) return `result:${(a.NestedResult as number[])[0]}`
+    if (typeof a.Result === 'number') return `result:${a.Result}`
+    if (a.GasCoin) return 'gas'
+    return JSON.stringify(a)
+  })
+}
+
+const u64 = (v: bigint) => `pure:${toBase64(bcs.u64().serialize(v).toBytes())}`
+const bool = (v: boolean) => `pure:${toBase64(bcs.bool().serialize(v).toBytes())}`
+const str = (v: string) => `pure:${toBase64(bcs.string().serialize(v).toBytes())}`
+const addr = (v: string) => `pure:${toBase64(bcs.Address.serialize(v).toBytes())}`
+const bytes = (v: string) => `pure:${toBase64(bcs.vector(bcs.u8()).serialize(new TextEncoder().encode(v)).toBytes())}`
+
+describe('ptb builders — exact arguments', () => {
+  it('purchase(gate, platformConfig, payment split from gas)', () => {
+    const tx = buildPurchaseTx(cfg, 500n)
+    expect(callArgs(tx, 'purchase')).toEqual([`obj:${GATE}`, `obj:${PLATFORM}`, 'result:0'])
+  })
+
+  it('consume(nft, gate, nonce bytes) and the soulbound variant', () => {
+    const expected = [`obj:${NFT}`, `obj:${GATE}`, bytes('nonce-1')]
+    expect(callArgs(buildConsumeTx(cfg, NFT, 'nonce-1'), 'consume')).toEqual(expected)
+    expect(callArgs(buildConsumeTx({ ...cfg, soulbound: true }, NFT, 'nonce-1'), 'consume_soulbound')).toEqual(expected)
+  })
+
+  it('create_gate(platform, price, recipient, uses, soulbound, autoBurn, name, image, description, policy)', () => {
+    const tx = buildCreateGateTx(PKG, PLATFORM, {
+      priceMist: 10_000_000n,
+      paymentRecipient: RECIPIENT,
+      defaultUses: 3n,
+      soulbound: true,
+      autoBurnAtZero: false,
+      nftName: 'Pass',
+      nftImageUrl: 'https://example.com/i.png',
+      nftDescription: 'd',
+    })
+    expect(callArgs(tx, 'new_gate_policy')).toEqual([bool(false), bool(false), bool(false), bool(false)])
+    expect(callArgs(tx, 'create_gate')).toEqual([
+      `obj:${PLATFORM}`,
+      u64(10_000_000n),
+      addr(RECIPIENT),
+      u64(3n),
+      bool(true),
+      bool(false),
+      str('Pass'),
+      str('https://example.com/i.png'),
+      str('d'),
+      'result:0',
+    ])
+  })
+
+  it('create_free_gate(platform, fee, …) takes the split fee coin second', () => {
+    const tx = buildCreateGateTx(PKG, PLATFORM, {
+      priceMist: 0n,
+      freeGateFeeMist: 100_000_000n,
+      paymentRecipient: RECIPIENT,
+      defaultUses: 1n,
+      soulbound: false,
+      autoBurnAtZero: true,
+      nftName: 'n',
+      nftImageUrl: 'u',
+      nftDescription: 'd',
+    })
+    const args = callArgs(tx, 'create_free_gate')
+    expect(args.slice(0, 3)).toEqual([`obj:${PLATFORM}`, 'result:1', addr(RECIPIENT)])
+    expect(args).toHaveLength(10)
+  })
+
+  it('admin setters pass (cap, gate, value) in order', () => {
+    const head = [`obj:${ADMIN_CAP}`, `obj:${GATE}`]
+    expect(callArgs(buildSetPriceTx(adminCtx, 7n), 'set_price')).toEqual([...head, `obj:${PLATFORM}`, u64(7n)])
+    expect(callArgs(buildSetPaymentRecipientTx(adminCtx, RECIPIENT), 'set_payment_recipient')).toEqual([...head, addr(RECIPIENT)])
+    expect(callArgs(buildSetPausedTx(adminCtx, true), 'set_paused')).toEqual([...head, bool(true)])
+    expect(callArgs(buildSetDefaultUsesTx(adminCtx, 9n), 'set_default_uses')).toEqual([...head, u64(9n)])
+    expect(callArgs(buildSetSoulboundTx(adminCtx, false), 'set_soulbound')).toEqual([...head, bool(false)])
+    expect(callArgs(buildSetAutoBurnAtZeroTx(adminCtx, true), 'set_auto_burn_at_zero')).toEqual([...head, bool(true)])
+    expect(callArgs(buildSetNftNameTx(adminCtx, 'N'), 'set_nft_name')).toEqual([...head, str('N')])
+    expect(callArgs(buildSetNftImageUrlTx(adminCtx, 'https://x/y.png'), 'set_nft_image_url')).toEqual([...head, str('https://x/y.png')])
+    expect(callArgs(buildSetNftDescriptionTx(adminCtx, 'D'), 'set_nft_description')).toEqual([...head, str('D')])
+    expect(callArgs(buildMakeGateImmutableTx(adminCtx), 'make_gate_immutable')).toEqual([...head, `obj:${PLATFORM}`])
+    expect(callArgs(buildMakeGateFreeTx(adminCtx, 5n), 'make_gate_free')).toEqual([...head, `obj:${PLATFORM}`, 'result:0'])
+  })
+
+  it('airdrop(cap, gate, platform, commission, recipient)', () => {
+    expect(callArgs(buildAirdropTx(adminCtx, RECIPIENT, 1_000_000n), 'airdrop')).toEqual([
+      `obj:${ADMIN_CAP}`,
+      `obj:${GATE}`,
+      `obj:${PLATFORM}`,
+      'result:0',
+      addr(RECIPIENT),
+    ])
   })
 })

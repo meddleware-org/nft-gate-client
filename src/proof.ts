@@ -66,6 +66,14 @@ export function decodeAccessProof(token: string): AccessProof {
   return proof
 }
 
+/** Base58 alphabet (no 0, O, I, l); a Sui transaction digest is 32 bytes → at most 44 characters. */
+const TX_DIGEST = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/
+
+/** True if `s` has the shape of a base58 Sui transaction digest. */
+export function isTransactionDigest(s: string): boolean {
+  return TX_DIGEST.test(s)
+}
+
 /** A wallet-provided personal-message signer (e.g. wallet-standard `sui:signPersonalMessage`). */
 export type PersonalMessageSigner = (message: Uint8Array) => Promise<{ signature: string }>
 
@@ -73,7 +81,8 @@ export type PersonalMessageSigner = (message: Uint8Array) => Promise<{ signature
  * Sign a challenge and assemble the encoded access-proof token to hand to any gateway as its
  * auth bearer (e.g. an upload-relay client's auth-token option, an `Authorization` header).
  *
- * @throws {Error} if the wallet signer rejects or fails to sign the message.
+ * @throws {Error} if `consumeDigest` is not a base58 transaction digest, or if the wallet signer
+ *   rejects or fails to sign the message.
  */
 export async function buildAccessProof(opts: {
   address: string
@@ -82,6 +91,9 @@ export async function buildAccessProof(opts: {
   /** Present for single-use gates: the `consume` tx digest. */
   consumeDigest?: string
 }): Promise<string> {
+  if (opts.consumeDigest !== undefined && !isTransactionDigest(opts.consumeDigest)) {
+    throw new Error('consumeDigest is not a base58 Sui transaction digest')
+  }
   const message = personalMessageForNonce(opts.challenge.nonce)
   const { signature } = await opts.sign(message)
   const proof: AccessProof = { address: opts.address, nonce: opts.challenge.nonce, signature }

@@ -111,3 +111,20 @@ describe('ownership (gRPC core API)', () => {
     expect(parseOwnedAccessNft(sb)?.usesRemaining).toBe(2)
   })
 })
+
+describe('uses_remaining u64 parsing', () => {
+  const withUses = (raw: string) => ({
+    objectId: '0xu',
+    type: '0xpkg::access_gate::AccessNFT',
+    json: { data: { gate_id: GATE_A, variant: { variant: 'SingleUse', fields: { uses_remaining: raw } } } },
+  })
+
+  it('is exact up to MAX_SAFE_INTEGER and saturates above it', () => {
+    expect(parseOwnedAccessNft(withUses('9007199254740991'))?.usesRemaining).toBe(Number.MAX_SAFE_INTEGER)
+    expect(parseOwnedAccessNft(withUses('18446744073709551615'))?.usesRemaining).toBe(Number.MAX_SAFE_INTEGER)
+  })
+
+  it('reports a malformed count as unknown, never 0', () => {
+    expect(parseOwnedAccessNft(withUses('lots'))?.usesRemaining).toBeNull()
+  })
+})

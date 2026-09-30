@@ -4,7 +4,11 @@ import {
   encodeAccessProof,
   decodeAccessProof,
   buildAccessProof,
+  isTransactionDigest,
 } from '../src/proof.js'
+
+// A real-shaped Sui transaction digest (base58 of 32 bytes).
+const DIGEST = '5Wq9tE4gXz8hEvFhYt8KkTJb2Pp6qXqj8cRk3xN1mYdL'
 
 describe('proof', () => {
   it('derives a stable personal message for a nonce', () => {
@@ -86,14 +90,31 @@ describe('proof', () => {
       address: '0xabc',
       challenge: { nonce: 'xyz', expiresAt: Date.now() + 1000 },
       sign,
-      consumeDigest: 'digest1',
+      consumeDigest: DIGEST,
     })
     expect(sign).toHaveBeenCalledOnce()
     expect(decodeAccessProof(token)).toEqual({
       address: '0xabc',
       nonce: 'xyz',
       signature: 'BASE64SIG',
-      consumeDigest: 'digest1',
+      consumeDigest: DIGEST,
     })
+  })
+
+  it('refuses to build a proof around a malformed consume digest', async () => {
+    const sign = vi.fn(async () => ({ signature: 'S' }))
+    const challenge = { nonce: 'xyz', expiresAt: Date.now() + 1000 }
+    for (const bad of ['digest1', 'D'.repeat(45), `${DIGEST.slice(0, -1)}0`, 'ÄBC'.repeat(12)]) {
+      await expect(buildAccessProof({ address: '0xabc', challenge, sign, consumeDigest: bad })).rejects.toThrow(
+        /base58/,
+      )
+    }
+    expect(sign).not.toHaveBeenCalled()
+  })
+
+  it('isTransactionDigest accepts base58 digests only', () => {
+    expect(isTransactionDigest(DIGEST)).toBe(true)
+    expect(isTransactionDigest('0OIl'.repeat(10))).toBe(false)
+    expect(isTransactionDigest('')).toBe(false)
   })
 })

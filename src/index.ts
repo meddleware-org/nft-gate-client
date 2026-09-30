@@ -64,5 +64,6 @@ export {
   encodeAccessProof,
   decodeAccessProof,
   buildAccessProof,
+  isTransactionDigest,
 } from './proof.js'
 export type { PersonalMessageSigner } from './proof.js'

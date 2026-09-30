@@ -35,10 +35,26 @@ function parseUsesRemaining(variant: any): number | null {
   if (tag === 'UnlimitedPass') return null
   const fields = variant.fields ?? variant
   const ur = fields?.uses_remaining ?? fields?.SingleUse?.uses_remaining
-  if (ur != null) return Number(ur)
+  if (ur != null) return usesToNumber(ur)
   // Either an unknown tag, or a SingleUse whose count is missing from this node's rendering — in
   // both cases the remaining count is unknown, so report null (never a fabricated 0).
   return null
+}
+
+/**
+ * Convert an on-chain u64 count (rendered as a decimal string or number) exactly. Counts above
+ * `Number.MAX_SAFE_INTEGER` saturate there: still "effectively unlimited", and never reported lower
+ * than the chain holds. A malformed value is unknown (`null`).
+ */
+function usesToNumber(raw: unknown): number | null {
+  let v: bigint
+  try {
+    v = BigInt(raw as string | number)
+  } catch {
+    return null
+  }
+  if (v < 0n) return null
+  return v > BigInt(Number.MAX_SAFE_INTEGER) ? Number.MAX_SAFE_INTEGER : Number(v)
 }
 
 /** True if `type` names an `access_gate` NFT struct (transferable or soulbound). */

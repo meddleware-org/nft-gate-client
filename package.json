@@ -1,6 +1,6 @@
 {
   "name": "@meddleware/nft-gate-client",
-  "version": "0.0.12",
+  "version": "0.0.13",
   "homepage": "https://docs.meddleware.co.uk/blockchain/sui/access-gate/",
   "type": "module",
   "description": "Client-side helpers for the access_gate NFT access primitive: ownership queries, purchase/consume PTB builders, challenge signing, and access-proof assembly.",
@@ -47,7 +47,7 @@
     "jiti": "^2.7.0",
     "typescript": "~6.0.3",
     "typescript-eslint": "^8.70.1",
-    "vitest": "~4.1.10"
+    "vitest": "~5.0.2"
   },
   "publishConfig": {
     "access": "public"
