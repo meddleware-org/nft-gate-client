@@ -3,16 +3,15 @@
 ## Scope
 
 This policy covers security issues in the `@meddleware/nft-gate-client` package source
-(`src/**`) — the access-proof builder/encoder/decoder (`src/proof.ts`), the challenge helper, the
-PTB builders (`src/ptb.ts`), and the read-only ownership queries (`src/ownership.ts`).
+(`src/**`) — the access-proof builder/encoder/decoder (`src/proof.ts`) and the challenge helper.
+`access_gate` transaction builders and reads are `@meddleware/access-gate-client` (its own policy).
 
 It does not cover:
 
 - The `nft-gate` gateways that **verify** proofs (see that repo's `SECURITY.md`) — this client
   builds and signs proofs but verifies nothing
 - The `access-gate-sui` on-chain package (see that repo's `SECURITY.md`)
-- The `@mysten/sui` SDK (report upstream to [Mysten Labs](https://github.com/MystenLabs))
-- The caller-supplied wallet/signer, RPC endpoint, and protocol addresses (all injected)
+- The caller-supplied wallet/signer and gateway host (both injected)
 
 ## Security model (invariants)
 
@@ -27,8 +26,8 @@ treated as high severity:
    `base64(JSON{address,nonce,signature,consumeDigest?})` with fixed field order; it is pinned by a
    golden conformance vector shared with both gateway implementations. Any change is a breaking
    change requiring lockstep updates to the gateways and the vector.
-4. **No protocol addresses or secrets are hardcoded** in shipped source; `packageId` / `gateId` /
-   `nftType` / `platformConfigId` are all caller-supplied.
+4. **No protocol addresses or secrets are hardcoded** in shipped source, and there are no runtime
+   dependencies.
 5. **Parsing is pollution-safe.** `decodeAccessProof` copies only known fields into a fresh object;
    no attacker key reaches a prototype.
 

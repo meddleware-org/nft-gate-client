@@ -7,25 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Targets the policy-aware `access_gate` (testnet `0x1a81ca17…eea4`); packages that predate it are not
-supported by the admin builders.
+### Changed
+
+- **Breaking:** the package is now the nft-gate **wire protocol only** — `fetchChallenge`,
+  `personalMessageForNonce`, `buildAccessProof`, `encodeAccessProof`, `decodeAccessProof`,
+  `isTransactionDigest` and the `Challenge` / `AccessProof` / `PersonalMessageSigner` types. Every
+  `access_gate` PTB builder, read and object type moved to `@meddleware/access-gate-client`
+  (no re-exports).
+- No runtime dependencies (`@mysten/sui` removed).
 
 ### Added
 
-- `GatePolicy` (`freezeRequiresUnpaused`, `lockCommissionOnFreeze`, `pauseBlocksDecryption`, `pauseBlocksAccess`), `DEFAULT_GATE_POLICY`, `isRestrictivePolicy`.
-- `buildMakeGateFreeTx(ctx, feeMist)`.
-- `fetchPlatformConfig` / `parsePlatformConfig` (`PlatformConfigInfo`), `CommissionTerms`, `commissionForPrice`, `minimumPaidPriceMist`, `gateCommissionMist`, `platformCommissionTerms`, `BPS_DENOMINATOR`, `MAX_COMMISSION_BPS`.
-- `OwnedGate.policy`, `.lockedCommission` and `.freeFeePaid`, parsed by `parseGate`.
 - `isTransactionDigest(s)`; `buildAccessProof` rejects a `consumeDigest` that is not a base58 Sui
   transaction digest (before asking the wallet to sign).
-
-### Changed
-
-- **Breaking:** `GateAdminContext` gains `platformConfigId`; `buildSetPriceTx`, `buildMakeGateImmutableTx` pass it.
-- **Breaking:** `buildCreateGateTx(packageId, platformConfigId, opts)` always sends a `GatePolicy`; price 0 calls `create_free_gate` with `opts.freeGateFeeMist`.
-- **Breaking:** `buildAirdropTx(ctx, recipient, commissionMist)` pays the airdrop commission.
-- `usesRemaining` is parsed exactly from the u64 (via `BigInt`), saturating at
-  `Number.MAX_SAFE_INTEGER`; a malformed count is `null` (unknown), never a fabricated number.
 
 ## [0.0.8] - 2026-09-17
 

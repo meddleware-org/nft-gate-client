@@ -2,7 +2,12 @@
 
 [![License: 0BSD](https://img.shields.io/badge/License-0BSD-blue.svg)](LICENSE)
 
-Client-side TypeScript helpers for the `access_gate` NFT access primitive on Sui. Browser-safe (runs in a wallet app) and Node-friendly. **Client-side only** — server-side verification is provided by the [nft-gate](https://github.com/meddleware-org/nft-gate) service (Rust/Axum gateway or Cloudflare Workers equivalent).
+The client side of the [nft-gate](https://github.com/meddleware-org/nft-gate) wire protocol: fetch a
+challenge, derive the exact personal message a wallet signs, and encode the access proof a gateway
+verifies. Browser-safe, Node-friendly, **no runtime dependencies**.
+
+Building `access_gate` transactions (purchase, consume, gate admin) and reading gates, passes and the
+platform configuration: [`@meddleware/access-gate-client`](https://github.com/meddleware-org/access-gate-client).
 
 ## Install
 
@@ -10,158 +15,43 @@ Client-side TypeScript helpers for the `access_gate` NFT access primitive on Sui
 npm install @meddleware/nft-gate-client
 ```
 
-## API
+## Usage
 
 ```ts
-import {
-  ownsAccessNft, fetchAccessNfts,                // ownership queries
-  buildPurchaseTx, buildConsumeTx,               // PTB builders (wallet signs + executes)
-  fetchChallenge,                                 // GET /v1/challenge
-  buildAccessProof, personalMessageForNonce,      // challenge signing + proof token
-} from '@meddleware/nft-gate-client'
+import { fetchChallenge, buildAccessProof } from '@meddleware/nft-gate-client'
 
-const cfg = { packageId, gateId, platformConfigId, nftType, soulbound: true }
-
-// 1. Check whether the connected wallet has access:
-const hasAccess = await ownsAccessNft(suiClient, address, cfg.nftType, cfg.gateId)
-
-// 2. Purchase access if not:
-const tx = buildPurchaseTx(cfg, priceMist)       // wallet signs & executes
-
-// 3. Prove access to a gateway (single-use gateways: consume first, bound to the challenge nonce):
+// Single-use gates: first execute an access_gate `consume` (access-gate-client) and keep its digest.
 const challenge = await fetchChallenge(gatewayHost)
-// const { digest: consumeDigest } = await exec(buildConsumeTx(cfg, nftId, challenge.nonce))
 const token = await buildAccessProof({ address, challenge, sign, consumeDigest })
-// pass `token` as the relay/gateway Authorization: Bearer header
+// send `token` as `Authorization: Bearer <token>` to the gateway / relay
 ```
 
-## API Reference
+## API
 
-### Ownership
-
-**`ownsAccessNft(client, address, nftType, gateId): Promise<boolean>`**
-
-Returns `true` if the address holds at least one unexpired access NFT matching the gate.
-
-**`fetchAccessNfts(client, address, nftType): Promise<OwnedAccessNft[]>`**
-
-Returns all access NFTs owned by an address for a given struct type.
-
-**`fetchAccessNftById(client, objectId): Promise<OwnedAccessNft | null>`**
-
-Fetch a single access NFT by object ID.
-
-**`parseOwnedAccessNft(object): OwnedAccessNft | null`**
-
-Parse a raw `SuiObjectResponse` into an `OwnedAccessNft`. Returns `null` if the object is not a valid access NFT.
-
-### PTB Builders
-
-**`buildPurchaseTx(config, priceMist): Transaction`**
-
-Build a transaction to purchase an access NFT. Caller signs and executes with their wallet.
-
-**`buildConsumeTx(config, nftObjectId, nonce): Transaction`**
-
-Build a transaction that spends one use of a single-use pass, bound to `nonce` (the gateway's
-challenge nonce; ≥ 8 bytes). Calls `consume` or `consume_soulbound` from `config.soulbound`. An
-exhausted pass is deleted if the gate auto-burns, otherwise kept. Execute it before calling
-`buildAccessProof` with the resulting `consumeDigest`.
-
-**`buildCreateGateTx(packageId, platformConfigId, opts): Transaction`**
-
-Build a transaction to create a new access gate (admin operation). A paid gate (`priceMist > 0`)
-calls `create_gate`; its price must be at least the platform minimum (`minimumPaidPriceMist`). A
-free gate (`priceMist == 0`) calls `create_free_gate` and pays `opts.freeGateFeeMist` (the
-platform's `freeGateFeeMist`) from gas. `opts.policy` is an optional `GatePolicy` — immutable
-restrictions a tool's operator applies to the gates it creates:
-
-| Flag | Effect |
+| Export | Purpose |
 | --- | --- |
-| `freezeRequiresUnpaused` | `make_gate_immutable` aborts (code 10) while the gate is paused. |
-| `lockCommissionOnFreeze` | Freezing snapshots the platform commission terms; frozen mints use them. |
-| `pauseBlocksDecryption` | Seal `nft_gate` denies decryption while paused. |
-| `pauseBlocksAccess` | While paused, `consume` aborts and nft-gate gateways deny holders. |
-
-**Admin builders** take a `GateAdminContext` (`{ packageId, gateId, adminCapId, platformConfigId }`):
-`buildSetPriceTx`, `buildSetPaymentRecipientTx`, `buildSetPausedTx`, `buildSetDefaultUsesTx`,
-`buildSetSoulboundTx`, `buildSetAutoBurnAtZeroTx`, `buildSetNftNameTx`, `buildSetNftImageUrlTx`,
-`buildSetNftDescriptionTx`, `buildAirdropTx(ctx, recipient, commissionMist)` (the admin pays the
-commission a purchase would carry), `buildMakeGateFreeTx(ctx, feeMist)` and
-`buildMakeGateImmutableTx(ctx)` (irreversible; consumes the `AdminCap`).
-
-**Platform terms and commission** — `fetchPlatformConfig(client, platformConfigId)` returns
-`{ treasury, commissionBps, minCommissionMist, freeGateFeeMist }`. The helpers mirror the contract:
-`commissionForPrice(price, terms)` = `max(price × bps / 10000, minMist)`, never more than 10% of the
-price; `minimumPaidPriceMist(minCommissionMist)` = 10 × the floor; `gateCommissionMist(gate,
-platform)` applies a frozen gate's locked terms.
-
-### Challenge & Proof
-
-**`fetchChallenge(gatewayHost, opts?): Promise<Challenge>`**
-
-Fetch a time-bound nonce from the gateway's `GET /v1/challenge` endpoint.
-
-**`personalMessageForNonce(nonce): Uint8Array`**
-
-Returns the exact bytes the wallet must sign for a nonce. Matches the gateway's derivation: `nft-gate:access:<nonce>`.
-
-**`buildAccessProof(opts): Promise<string>`**
-
-One-shot helper: sign the challenge with the wallet and return the base64(JSON) Bearer token to pass to the gateway or relay.
-
-**`encodeAccessProof(proof: AccessProof): string`**
-
-Encode a proof struct directly to a base64(JSON) token (lower-level, sync).
-
-**`decodeAccessProof(token: string): AccessProof`**
-
-Decode a base64(JSON) token back to a proof struct.
+| `fetchChallenge(gatewayHost, opts?)` | `GET /v1/challenge` → `{ nonce, expiresAt }` |
+| `personalMessageForNonce(nonce)` | the exact bytes the wallet signs: `nft-gate:access:<nonce>` (UTF-8) |
+| `buildAccessProof({ address, challenge, sign, consumeDigest? })` | sign the challenge and return the Bearer token; rejects a `consumeDigest` that is not a base58 transaction digest |
+| `encodeAccessProof(proof)` / `decodeAccessProof(token)` | base64(JSON) token ↔ `AccessProof` (decode caps size at 4 KiB and enforces ASCII fields) |
+| `isTransactionDigest(s)` | base58 Sui transaction-digest shape check |
+| types `Challenge`, `AccessProof`, `PersonalMessageSigner` | wire types |
 
 ## Wire protocol
 
 - **Challenge**: `{ nonce: string, expiresAt: number }`
 - **Signed message**: `nft-gate:access:<nonce>` (UTF-8 bytes)
-- **Proof token**: `base64(JSON { address, nonce, signature, consumeDigest? })`
+- **Proof token**: `base64(JSON { address, nonce, signature, consumeDigest? })`, fixed field order
 
-This format is verified by both the Rust gateway and the Cloudflare Workers gateway in the [nft-gate](https://github.com/meddleware-org/nft-gate) repo.
-
-## Types
-
-```ts
-interface AccessGateConfig {
-  packageId: string
-  gateId: string
-  platformConfigId: string // the package's shared PlatformConfig (commission)
-  nftType: string
-  soulbound: boolean
-}
-
-interface Challenge {
-  nonce: string
-  expiresAt: number
-}
-
-interface AccessProof {
-  address: string
-  nonce: string
-  signature: string
-  consumeDigest?: string
-}
-
-interface OwnedAccessNft {
-  objectId: string
-  gateId: string
-  expiresAt?: number
-}
-```
+Both gateways in [nft-gate](https://github.com/meddleware-org/nft-gate) verify exactly this format; a
+golden vector in `tests/proof.test.ts` pins it.
 
 ## Development
 
 ```bash
-npm run type-check   # tsc --noEmit
-npm test             # vitest run (19 unit tests)
-npm run test:watch   # vitest interactive
+npm run type-check
+npm test
+npm run build   # emits .d.ts into dist/ (also run by prepublishOnly)
 ```
 
 ## License

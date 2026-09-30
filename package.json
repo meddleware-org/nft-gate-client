@@ -3,7 +3,7 @@
   "version": "0.0.13",
   "homepage": "https://docs.meddleware.co.uk/blockchain/sui/access-gate/",
   "type": "module",
-  "description": "Client-side helpers for the access_gate NFT access primitive: ownership queries, purchase/consume PTB builders, challenge signing, and access-proof assembly.",
+  "description": "The nft-gate wire protocol, client side: challenge fetching, the signed personal message and access-proof encoding. No runtime dependencies.",
   "author": "MeddleWare <dev@meddleware.co.uk>",
   "license": "0BSD",
   "repository": {
@@ -12,10 +12,9 @@
   },
   "keywords": [
     "sui",
-    "nft",
+    "nft-gate",
     "access-control",
-    "web3",
-    "move"
+    "web3"
   ],
   "files": [
     "src",
@@ -34,12 +33,8 @@
     "type-check": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:integration": "vitest run --config vitest.integration.config.ts",
     "lint:js": "eslint .",
     "lint": "npm run lint:js"
-  },
-  "dependencies": {
-    "@mysten/sui": "^2.33.1"
   },
   "devDependencies": {
     "@types/node": "~24.12.2",

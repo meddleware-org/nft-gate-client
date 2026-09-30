@@ -1,63 +1,13 @@
 /**
- * `@meddleware/nft-gate-client` — client-side helpers for the `access_gate` primitive.
+ * `@meddleware/nft-gate-client` — the nft-gate wire protocol, client side.
  *
- * Client-side only: ownership queries, purchase/consume PTB builders, challenge signing,
- * and access-proof assembly. Server-side verification lives in the Rust gateway.
+ * Challenge fetching, the personal message a wallet signs, and access-proof encoding/decoding —
+ * the one contract shared with both nft-gate gateways (golden vector in the tests). No runtime
+ * dependencies. Building `access_gate` transactions and reading gates/NFTs:
+ * `@meddleware/access-gate-client`.
  */
 
-export type {
-  AccessGateConfig,
-  CoreObject,
-  GateAdminContext,
-  GatePolicy,
-  CommissionTerms,
-  PlatformConfigInfo,
-  OwnedGate,
-  Challenge,
-  AccessProof,
-  OwnedAccessNft,
-  OwnedObjectsClient,
-  SuiObjectClient,
-} from './types.js'
-
-export {
-  fetchAccessNfts,
-  ownsAccessNft,
-  parseOwnedAccessNft,
-  fetchAccessNftById,
-  parseAdminCap,
-  parseGate,
-  fetchAdminCaps,
-  fetchGate,
-  fetchOwnedGates,
-  parsePlatformConfig,
-  fetchPlatformConfig,
-} from './ownership.js'
-export {
-  DEFAULT_GATE_POLICY,
-  isRestrictivePolicy,
-  BPS_DENOMINATOR,
-  MAX_COMMISSION_BPS,
-  platformCommissionTerms,
-  commissionForPrice,
-  minimumPaidPriceMist,
-  gateCommissionMist,
-  buildPurchaseTx,
-  buildConsumeTx,
-  buildCreateGateTx,
-  buildSetPriceTx,
-  buildSetPaymentRecipientTx,
-  buildSetPausedTx,
-  buildSetDefaultUsesTx,
-  buildSetSoulboundTx,
-  buildSetAutoBurnAtZeroTx,
-  buildSetNftNameTx,
-  buildSetNftImageUrlTx,
-  buildSetNftDescriptionTx,
-  buildAirdropTx,
-  buildMakeGateFreeTx,
-  buildMakeGateImmutableTx,
-} from './ptb.js'
+export type { Challenge, AccessProof } from './types.js'
 export { fetchChallenge } from './challenge.js'
 export {
   personalMessageForNonce,
