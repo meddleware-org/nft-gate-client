@@ -21,6 +21,7 @@
     "dist",
     "CHANGELOG.md"
   ],
+  "sideEffects": false,
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
