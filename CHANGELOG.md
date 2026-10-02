@@ -5,7 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [0.0.14] - 2026-10-02
+
+### Changed
+
+- `fetchChallenge` aborts after `timeoutMs` (default 10 s) as well as on the caller's `signal`, so a
+  hung gateway no longer stalls an upload. The host must be `https:` (`http:` only for a loopback
+  host) and the URL is built with `new URL` (a path prefix is kept; query and fragment are dropped).
+  The response is size-capped (4 KiB) before parsing; `nonce` must be a non-empty ASCII string and
+  the expiry a finite number.
+
+## [0.0.13] - 2026-09-30
 
 ### Changed
 

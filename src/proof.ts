@@ -25,8 +25,8 @@ function fromBase64(s: string): string {
   return new TextDecoder().decode(bytes)
 }
 
-/** True iff every character is ASCII (code point ≤ 0x7F). */
-function isAscii(s: string): boolean {
+/** True iff every character is ASCII (code point ≤ 0x7F). Internal: not re-exported from the index. */
+export function isAscii(s: string): boolean {
   for (let i = 0; i < s.length; i++) {
     if (s.charCodeAt(i) > 0x7f) return false
   }

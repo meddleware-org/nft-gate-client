@@ -30,7 +30,7 @@ const token = await buildAccessProof({ address, challenge, sign, consumeDigest }
 
 | Export | Purpose |
 | --- | --- |
-| `fetchChallenge(gatewayHost, opts?)` | `GET /v1/challenge` → `{ nonce, expiresAt }` |
+| `fetchChallenge(gatewayHost, opts?)` | `GET /v1/challenge` → `{ nonce, expiresAt }`; https only (loopback http allowed), aborts after `opts.timeoutMs` (10 s) or on `opts.signal` |
 | `personalMessageForNonce(nonce)` | the exact bytes the wallet signs: `nft-gate:access:<nonce>` (UTF-8) |
 | `buildAccessProof({ address, challenge, sign, consumeDigest? })` | sign the challenge and return the Bearer token; rejects a `consumeDigest` that is not a base58 transaction digest |
 | `encodeAccessProof(proof)` / `decodeAccessProof(token)` | base64(JSON) token ↔ `AccessProof` (decode caps size at 4 KiB and enforces ASCII fields) |
