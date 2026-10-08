@@ -1,6 +1,6 @@
 {
   "name": "@meddleware/nft-gate-client",
-  "version": "0.0.15",
+  "version": "0.0.16",
   "homepage": "https://docs.meddleware.co.uk/blockchain/sui/access-gate/",
   "type": "module",
   "description": "The nft-gate wire protocol, client side: challenge fetching, the signed personal message and access-proof encoding. No runtime dependencies.",
@@ -19,6 +19,7 @@
   "files": [
     "src",
     "dist",
+    "vectors.json",
     "CHANGELOG.md"
   ],
   "sideEffects": false,
@@ -26,7 +27,8 @@
     ".": {
       "types": "./dist/index.d.ts",
       "default": "./src/index.ts"
-    }
+    },
+    "./vectors.json": "./vectors.json"
   },
   "scripts": {
     "build": "rm -rf dist && tsc -p tsconfig.build.json",
@@ -35,9 +37,14 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "lint:js": "eslint .",
-    "lint": "npm run lint:js"
+    "lint": "npm run lint:js",
+    "gen:vectors": "node scripts/gen-vectors.mjs > vectors.json",
+    "check:vectors": "node scripts/gen-vectors.mjs | diff -q - vectors.json"
   },
   "devDependencies": {
+    "@mysten/sui": "^2.35.0",
+    "@noble/curves": "^2.4.0",
+    "@noble/hashes": "^2.4.0",
     "@types/node": "~24.12.2",
     "eslint": "^10.11.0",
     "jiti": "^2.7.0",

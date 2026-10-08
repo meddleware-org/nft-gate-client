@@ -12,12 +12,16 @@ describe('fetchChallenge', () => {
     expect(await fetchChallenge('https://gw.example')).toEqual({ nonce: 'abc', expiresAt: 123 })
   })
 
-  it('parses snake_case expires_at and strips trailing slash', async () => {
-    const spy = vi.fn(async () => new Response(JSON.stringify({ nonce: 'n2', expires_at: 456 }), { status: 200 }))
+  it('strips a trailing slash', async () => {
+    const spy = vi.fn(async () => new Response(JSON.stringify({ nonce: 'n2', expiresAt: 456 }), { status: 200 }))
     vi.stubGlobal('fetch', spy)
-    const res = await fetchChallenge('https://gw.example/')
-    expect(res).toEqual({ nonce: 'n2', expiresAt: 456 })
+    expect(await fetchChallenge('https://gw.example/')).toEqual({ nonce: 'n2', expiresAt: 456 })
     expect(spy).toHaveBeenCalledWith('https://gw.example/v1/challenge', expect.anything())
+  })
+
+  it('does not accept snake_case expires_at', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ nonce: 'n2', expires_at: 456 }), { status: 200 })))
+    await expect(fetchChallenge('https://gw.example')).rejects.toThrow(/expiry/)
   })
 
   it('throws on non-ok response', async () => {
@@ -44,7 +48,7 @@ describe('fetchChallenge hardening', () => {
   it('refuses a plain-http or malformed host, but allows http on loopback', async () => {
     vi.stubGlobal('fetch', ok({ nonce: 'n', expiresAt: 1 }))
     await expect(fetchChallenge('http://gw.example')).rejects.toThrow(/https/)
-    await expect(fetchChallenge('gw.example')).rejects.toThrow(/invalid gateway host/)
+    await expect(fetchChallenge('gw.example')).rejects.toThrow(/invalid gateway URL/)
     await expect(fetchChallenge('http://127.0.0.1:8787')).resolves.toEqual({ nonce: 'n', expiresAt: 1 })
   })
 
@@ -80,11 +84,31 @@ describe('fetchChallenge hardening', () => {
     await expect(fetchChallenge('https://gw.example')).rejects.toThrow(/not JSON/)
     vi.stubGlobal('fetch', ok({ nonce: '', expiresAt: 1 }))
     await expect(fetchChallenge('https://gw.example')).rejects.toThrow(/nonce/)
+    vi.stubGlobal('fetch', ok({ nonce: 'a b', expiresAt: 1 }))
+    await expect(fetchChallenge('https://gw.example')).rejects.toThrow(/nonce/)
     vi.stubGlobal('fetch', ok({ nonce: 'nönce', expiresAt: 1 }))
     await expect(fetchChallenge('https://gw.example')).rejects.toThrow(/nonce/)
     vi.stubGlobal('fetch', ok({ nonce: 'n', expiresAt: '1' }))
     await expect(fetchChallenge('https://gw.example')).rejects.toThrow(/expiry/)
+    for (const expiresAt of [0, -1, null]) {
+      vi.stubGlobal('fetch', ok({ nonce: 'n', expiresAt }))
+      await expect(fetchChallenge('https://gw.example')).rejects.toThrow(/expiry/)
+    }
     vi.stubGlobal('fetch', ok(null))
     await expect(fetchChallenge('https://gw.example')).rejects.toThrow(/nonce/)
+  })
+
+  it('refuses redirects and caps a streamed body without a content-length', async () => {
+    const spy = vi.fn(async () => new Response(JSON.stringify({ nonce: 'n', expiresAt: 1 }), { status: 200 }))
+    vi.stubGlobal('fetch', spy)
+    await fetchChallenge('https://gw.example')
+    expect(spy).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ redirect: 'error' }))
+    const stream = new ReadableStream<Uint8Array>({
+      pull(ctl) {
+        ctl.enqueue(new TextEncoder().encode('x'.repeat(1024)))
+      },
+    })
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(stream, { status: 200 })))
+    await expect(fetchChallenge('https://gw.example')).rejects.toThrow(/too large/)
   })
 })

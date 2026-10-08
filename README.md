@@ -21,8 +21,8 @@ npm install @meddleware/nft-gate-client
 import { fetchChallenge, buildAccessProof } from '@meddleware/nft-gate-client'
 
 // Single-use gates: first execute an access_gate `consume` (access-gate-client) and keep its digest.
-const challenge = await fetchChallenge(gatewayHost)
-const token = await buildAccessProof({ address, challenge, sign, consumeDigest })
+const challenge = await fetchChallenge(gateway)
+const token = await buildAccessProof({ address, challenge, sign, gateway, gateId, network: 'testnet', consumeDigest })
 // send `token` as `Authorization: Bearer <token>` to the gateway / relay
 ```
 
@@ -30,21 +30,36 @@ const token = await buildAccessProof({ address, challenge, sign, consumeDigest }
 
 | Export | Purpose |
 | --- | --- |
-| `fetchChallenge(gatewayHost, opts?)` | `GET /v1/challenge` → `{ nonce, expiresAt }`; https only (loopback http allowed), aborts after `opts.timeoutMs` (10 s) or on `opts.signal` |
-| `personalMessageForNonce(nonce)` | the exact bytes the wallet signs: `nft-gate:access:<nonce>` (UTF-8) |
-| `buildAccessProof({ address, challenge, sign, consumeDigest? })` | sign the challenge and return the Bearer token; rejects a `consumeDigest` that is not a base58 transaction digest |
-| `encodeAccessProof(proof)` / `decodeAccessProof(token)` | base64(JSON) token ↔ `AccessProof` (decode caps size at 4 KiB and enforces ASCII fields) |
-| `isTransactionDigest(s)` | base58 Sui transaction-digest shape check |
-| types `Challenge`, `AccessProof`, `PersonalMessageSigner` | wire types |
+| `fetchChallenge(gateway, opts?)` | `GET /v1/challenge` → `{ nonce, expiresAt }`; https only (loopback http allowed), no redirects, 4 KiB body cap, aborts after `opts.timeoutMs` (10 s) or on `opts.signal` |
+| `personalMessage(context)` | the exact bytes the wallet signs (see below); throws on any non-canonical field |
+| `buildAccessProof({ address, challenge, sign, gateway, gateId, network, consumeDigest? })` | sign the audience-bound message and return the Bearer token |
+| `encodeAccessProof(proof)` / `decodeAccessProof(token)` | base64(JSON) token ↔ `AccessProof`; both enforce the same field grammar and a 4 KiB cap |
+| `gatewayOrigin(url)`, `isNonce(s)`, `isTransactionDigest(s)` | canonical origin; nonce and base58-digest shape checks |
+| `GATEWAY_STATUS`, `GATEWAY_CONFLICT_CODES`, `parseGatewayError(body)` | the gateways' response contract (`409` carries `code: redeemed \| leased`) |
+| types `Challenge`, `AccessProof`, `AccessMessageContext`, `SuiNetwork`, `PersonalMessageSigner` | wire types |
+| `@meddleware/nft-gate-client/vectors.json` | the shared conformance vectors |
 
 ## Wire protocol
 
 - **Challenge**: `{ nonce: string, expiresAt: number }`
-- **Signed message**: `nft-gate:access:<nonce>` (UTF-8 bytes)
+- **Challenge**: `{ nonce: string, expiresAt: number }` (nonce: 1-128 characters of `A-Z a-z 0-9 . _ ~ -`)
+- **Signed message** (ASCII, one `key:value` line each):
+
+  ```text
+  nft-gate:access:v2
+  origin:<canonical origin>
+  gate:<0x + 64 lower-case hex>
+  network:<localnet|devnet|testnet|mainnet>
+  nonce:<nonce>
+  consume:<base58 digest>      (single-use gateways only)
+  ```
+
+  The gateway rebuilds it from its own origin, gate and network, so a signature is useless at any
+  other gateway, gate, network or consume.
 - **Proof token**: `base64(JSON { address, nonce, signature, consumeDigest? })`, fixed field order
 
-Both gateways in [nft-gate](https://github.com/meddleware-org/nft-gate) verify exactly this format; a
-golden vector in `tests/proof.test.ts` pins it.
+Both gateways in [nft-gate](https://github.com/meddleware-org/nft-gate) verify exactly this format;
+`vectors.json` pins it (`npm run gen:vectors` regenerates it, `npm run check:vectors` checks it is current).
 
 ## Development
 

@@ -21,11 +21,12 @@ treated as high severity:
 1. **The client never verifies and never decides.** `decodeAccessProof` only structurally parses;
    all signature/ownership authorization happens server-side in the gateway.
 2. **The client never holds private keys.** Signing is delegated to a caller-supplied signer.
-3. **The wire format is frozen and mirrored.** The signed message is exactly
-   `nft-gate:access:<nonce>` (UTF-8) and the proof token is
-   `base64(JSON{address,nonce,signature,consumeDigest?})` with fixed field order; it is pinned by a
-   golden conformance vector shared with both gateway implementations. Any change is a breaking
-   change requiring lockstep updates to the gateways and the vector.
+3. **The wire format is versioned, audience-bound and mirrored.** The signed message is
+   `nft-gate:access:v2` plus the gateway origin, gate id, network, nonce and (single-use) consume
+   digest, and the proof token is `base64(JSON{address,nonce,signature,consumeDigest?})` with fixed
+   field order; both are pinned by the published `vectors.json`, which both gateway implementations
+   test against. Any change is a breaking change requiring lockstep updates to the gateways and the
+   vectors.
 4. **No protocol addresses or secrets are hardcoded** in shipped source, and there are no runtime
    dependencies.
 5. **Parsing is pollution-safe.** `decodeAccessProof` copies only known fields into a fresh object;

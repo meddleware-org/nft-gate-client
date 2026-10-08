@@ -28,6 +28,8 @@ jobs:
         run: npm audit --audit-level=high
       - name: Type-check
         run: npm run type-check --if-present
+      - name: Vectors are current
+        run: npm run check:vectors
       - name: Unit tests
         run: npm run test --if-present
       - name: Build

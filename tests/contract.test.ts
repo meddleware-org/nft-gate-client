@@ -1,0 +1,16 @@
+import { describe, it, expect } from 'vitest'
+import { GATEWAY_STATUS, parseGatewayError } from '../src/contract.js'
+
+describe('parseGatewayError', () => {
+  it('reads an error with a known conflict code', () => {
+    expect(parseGatewayError({ error: 'already redeemed', code: 'redeemed' })).toEqual({ error: 'already redeemed', code: 'redeemed' })
+    expect(parseGatewayError({ error: 'busy', code: 'leased' })).toEqual({ error: 'busy', code: 'leased' })
+  })
+  it('drops unknown codes and rejects non-error bodies', () => {
+    expect(parseGatewayError({ error: 'x', code: 'surprise' })).toEqual({ error: 'x' })
+    for (const bad of [null, 'x', 7, [], {}, { error: 1 }]) expect(parseGatewayError(bad)).toBeNull()
+  })
+  it('keeps a store outage distinct from a conflict', () => {
+    expect(GATEWAY_STATUS.stateUnavailable).not.toBe(GATEWAY_STATUS.conflict)
+  })
+})

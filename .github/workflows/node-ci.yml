@@ -31,5 +31,8 @@ jobs:
       - name: Lint JS (eslint)
         run: npm run lint:js --if-present
 
+      - name: Vectors are current
+        run: npm run check:vectors
+
       - name: Test
         run: npm test

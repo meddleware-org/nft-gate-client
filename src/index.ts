@@ -1,19 +1,25 @@
 /**
  * `@meddleware/nft-gate-client` — the nft-gate wire protocol, client side.
  *
- * Challenge fetching, the personal message a wallet signs, and access-proof encoding/decoding —
- * the one contract shared with both nft-gate gateways (golden vector in the tests). No runtime
+ * Challenge fetching, the audience-bound message a wallet signs, access-proof encoding/decoding and
+ * the gateways' response contract — the one contract shared with both nft-gate gateways. The
+ * conformance vectors both gateways test against are published as `vectors.json`. No runtime
  * dependencies. Building `access_gate` transactions and reading gates/NFTs:
  * `@meddleware/access-gate-client`.
  */
 
-export type { Challenge, AccessProof } from './types.js'
+export type { Challenge, AccessProof, AccessMessageContext, SuiNetwork } from './types.js'
 export { fetchChallenge } from './challenge.js'
 export {
-  personalMessageForNonce,
+  ACCESS_MESSAGE_VERSION,
+  personalMessage,
+  gatewayOrigin,
   encodeAccessProof,
   decodeAccessProof,
   buildAccessProof,
   isTransactionDigest,
+  isNonce,
 } from './proof.js'
 export type { PersonalMessageSigner } from './proof.js'
+export { GATEWAY_STATUS, GATEWAY_CONFLICT_CODES, parseGatewayError } from './contract.js'
+export type { GatewayConflictCode, GatewayErrorBody } from './contract.js'
