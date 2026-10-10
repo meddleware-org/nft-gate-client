@@ -8,7 +8,7 @@
 | Licence | 0BSD |
 | Build | declaration-only (`tsc -p tsconfig.build.json` → `dist/*.d.ts`); ships TS source |
 | Runtime dependencies | none |
-| Runtime targets | Node.js ≥ 22, browsers, workerd |
+| Runtime targets | Node.js ≥ 24 (LTS), browsers, workerd |
 
 ## Layout
 

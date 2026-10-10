@@ -1,5 +1,5 @@
 import type { Challenge } from './types.js'
-import { gatewayOrigin, isNonce } from './proof.js'
+import { gatewayOrigin, isNonce, isRecord } from './proof.js'
 
 /** Default time limit for the challenge request; a hung gateway must not stall the caller. */
 const DEFAULT_TIMEOUT_MS = 10_000
@@ -74,7 +74,7 @@ export async function fetchChallenge(
   } catch {
     throw new Error('challenge response is not JSON')
   }
-  const body = (typeof data === 'object' && data !== null ? data : {}) as Record<string, unknown>
+  const body = isRecord(data) ? data : {}
   const nonce = body.nonce
   if (typeof nonce !== 'string' || !isNonce(nonce)) throw new Error('challenge response missing a valid nonce')
   const expiresAt = body.expiresAt

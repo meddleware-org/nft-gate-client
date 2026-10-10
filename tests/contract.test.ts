@@ -8,7 +8,8 @@ describe('parseGatewayError', () => {
   })
   it('drops unknown codes and rejects non-error bodies', () => {
     expect(parseGatewayError({ error: 'x', code: 'surprise' })).toEqual({ error: 'x' })
-    for (const bad of [null, 'x', 7, [], {}, { error: 1 }]) expect(parseGatewayError(bad)).toBeNull()
+    for (const bad of [null, 'x', 7, [], {}, { error: 1 }, { code: 'redeemed' }, [{ error: 'x' }]]) expect(parseGatewayError(bad)).toBeNull()
+    expect(parseGatewayError({ error: 'x', code: 7 })).toEqual({ error: 'x' })
   })
   it('keeps a store outage distinct from a conflict', () => {
     expect(GATEWAY_STATUS.stateUnavailable).not.toBe(GATEWAY_STATUS.conflict)

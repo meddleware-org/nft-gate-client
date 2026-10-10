@@ -1,7 +1,7 @@
 name: Publish (npm)
 
 # Publishes the package to npmjs on a v* tag. Publication is gated on a
-# self-contained `verify` job (type-check + test + build) that re-runs the
+# self-contained `verify` job (type-check + lint + test + build) that re-runs the
 # checks against the exact tagged commit, so a broken tag never ships.
 # Authentication uses npm OIDC trusted publishing — no long-lived NPM_TOKEN.
 
@@ -15,7 +15,7 @@ permissions:
 
 jobs:
   verify:
-    name: Verify (type-check + test)
+    name: Verify (type-check + lint + test + build)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -28,6 +28,8 @@ jobs:
         run: npm audit --audit-level=high
       - name: Type-check
         run: npm run type-check
+      - name: Lint
+        run: npm run lint
       - name: Vectors are current
         run: npm run check:vectors
       - name: Unit tests

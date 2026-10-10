@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.0.17] - 2026-10-10
+
+### Changed (breaking for lenient callers: a few tokens that 0.0.16 accepted are now refused)
+
+- `decodeAccessProof` is strict at the base64, UTF-8 and JSON layers and makes the same decisions as the
+  Rust gateway (`gateway-rust/src/proof.rs`). It refuses an unpadded token, whitespace or `=` inside the
+  token, the URL-safe alphabet, non-zero trailing bits, invalid UTF-8 (also inside an unknown key), a
+  byte-order mark, JSON nested more than 127 levels, an unpaired surrogate `\u` escape and a number that
+  overflows (`1e999`). Whitespace at either end of the token is still ignored, as `trim()` does in Rust.
+  Every token `encodeAccessProof` emits is canonical and round-trips.
+- `gatewayOrigin` no longer echoes the gateway string in its errors (it may carry userinfo).
+- `engines.node` is `>=24`.
+
+### Added
+
+- Eleven `proofDecodeRejects` vectors in `vectors.json` for the layers above, so both gateways' suites pin
+  the strict behaviour.
+
+### Fixed
+
+- Narrowing casts at trust boundaries (`challenge.ts`, `proof.ts`, `contract.ts`) are replaced by type
+  guards; no `as` remains in `src/` outside `as const`.
+
 ## [0.0.16] - 2026-10-08
 
 ### Changed (breaking: protocol v2, no v1 compatibility)

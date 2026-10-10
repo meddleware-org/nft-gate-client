@@ -27,6 +27,11 @@ export function isAscii(s: string): boolean {
   return true
 }
 
+/** True iff `x` is a plain JSON object (not null, not an array). Internal: not re-exported from the index. */
+export function isRecord(x: unknown): x is Record<string, unknown> {
+  return typeof x === 'object' && x !== null && !Array.isArray(x)
+}
+
 /** True if `s` is a nonce a gateway may issue (see {@link Challenge.nonce}). */
 export function isNonce(s: string): boolean {
   return NONCE.test(s)
@@ -44,11 +49,12 @@ export function gatewayOrigin(gateway: string): string {
   try {
     url = new URL(gateway)
   } catch {
-    throw new Error(`invalid gateway URL: ${gateway}`)
+    // The input is deliberately not echoed: a URL may carry userinfo, and error texts reach logs.
+    throw new Error('invalid gateway URL')
   }
   const loopback = LOOPBACK_HOSTS.includes(url.hostname)
   if (url.protocol !== 'https:' && !(url.protocol === 'http:' && loopback)) {
-    throw new Error(`gateway URL must use https: ${gateway}`)
+    throw new Error('gateway URL must use https (http is allowed for a loopback host only)')
   }
   if (url.username || url.password) throw new Error('gateway URL must not carry credentials')
   return url.origin
@@ -105,10 +111,81 @@ function toBase64(s: string): string {
   return btoa(bin)
 }
 
+/**
+ * Whitespace the Rust gateway's `str::trim` removes from either end of a token (Unicode `White_Space`).
+ * Listed explicitly because `String.prototype.trim` differs (it also strips U+FEFF, not U+0085).
+ */
+const EDGE_WHITESPACE = '[\\t\\n\\v\\f\\r \\u0085\\u00a0\\u1680\\u2000-\\u200a\\u2028\\u2029\\u202f\\u205f\\u3000]+'
+const TOKEN_EDGE_WHITESPACE = new RegExp(`^${EDGE_WHITESPACE}|${EDGE_WHITESPACE}$`, 'g')
+/** Fatal (a malformed sequence throws instead of becoming U+FFFD) and BOM-preserving (a BOM is not JSON). */
+const STRICT_UTF8 = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true })
+
+/**
+ * Strict decode, the same decisions as the Rust gateway's `BASE64_STANDARD.decode` plus a fatal UTF-8
+ * decode: canonical padded standard base64 only (no unpadded token, no inner whitespace, no URL-safe
+ * alphabet, no non-zero trailing bits), then well-formed UTF-8. `atob` alone is lenient on all of these.
+ */
 function fromBase64(s: string): string {
-  const bin = atob(s)
-  const bytes = Uint8Array.from(bin, (c) => c.charCodeAt(0))
-  return new TextDecoder().decode(bytes)
+  let bin: string
+  try {
+    bin = atob(s)
+  } catch {
+    throw new Error('access proof token is not base64')
+  }
+  // `btoa` emits canonical padded base64, so equality rejects everything `atob` forgave.
+  if (btoa(bin) !== s) throw new Error('access proof token is not canonical padded base64')
+  try {
+    return STRICT_UTF8.decode(Uint8Array.from(bin, (c) => c.charCodeAt(0)))
+  } catch {
+    throw new Error('access proof token is not valid UTF-8')
+  }
+}
+
+/** serde_json's default recursion limit: a document nested 128 levels deep (the top-level object counts) is refused. */
+const MAX_JSON_DEPTH = 127
+const JSON_NUMBER_START = /[-0-9]/
+const JSON_NUMBER_CHAR = /[-+.0-9eE]/
+const UNICODE_ESCAPE = /^u[0-9a-fA-F]{4}/
+
+/**
+ * The Rust decoder refuses three things `JSON.parse` accepts, all inside keys or values this package
+ * ignores and some in values a later duplicate key overwrites (so a reviver could not see them):
+ * nesting past serde_json's recursion limit, an unpaired surrogate `\uD800` escape, and a number that
+ * overflows to infinity (`1e999`). This lexical pass over text that already parsed refuses them too.
+ *
+ * @throws {Error} if `text` (valid JSON) holds one of the three.
+ */
+function requireJsonLikeRust(text: string): void {
+  let depth = 0
+  let inString = false
+  let highSurrogate = false
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i]
+    if (inString) {
+      let unit = -1
+      if (c === '\\') {
+        const escape = UNICODE_ESCAPE.exec(text.slice(i + 1, i + 6))
+        if (escape) {
+          unit = parseInt(escape[0].slice(1), 16)
+          i += 5
+        } else i++
+      } else if (c === '"') inString = false
+      const high = unit >= 0xd800 && unit <= 0xdbff
+      const low = unit >= 0xdc00 && unit <= 0xdfff
+      // A high surrogate must be followed at once by a low one, and a low one needs a high one before it.
+      if ((highSurrogate && !low) || (low && !highSurrogate)) throw new Error('access proof JSON holds an unpaired surrogate escape')
+      highSurrogate = high
+    } else if (c === '"') inString = true
+    else if (c === '{' || c === '[') {
+      if (++depth > MAX_JSON_DEPTH) throw new Error('access proof JSON is nested too deeply')
+    } else if (c === '}' || c === ']') depth--
+    else if (c !== undefined && JSON_NUMBER_START.test(c)) {
+      let end = i + 1
+      while (end < text.length && JSON_NUMBER_CHAR.test(text[end] ?? '')) end++
+      if (!Number.isFinite(Number(text.slice(i, end)))) throw new Error('access proof JSON holds a number out of range')
+      i = end - 1
+    }
+  }
 }
 
 /** Every rule a proof must satisfy, applied identically when encoding and decoding. */
@@ -156,9 +233,11 @@ export function decodeAccessProof(token: string): AccessProof {
   if (token.length > MAX_TOKEN_BYTES) {
     throw new Error(`access proof token too large (${token.length} > ${MAX_TOKEN_BYTES})`)
   }
-  const raw: unknown = JSON.parse(fromBase64(token))
-  if (typeof raw !== 'object' || raw === null || Array.isArray(raw)) throw new Error('malformed access proof')
-  return requireProofShape(raw as Record<string, unknown>)
+  const text = fromBase64(token.replace(TOKEN_EDGE_WHITESPACE, ''))
+  const raw: unknown = JSON.parse(text)
+  requireJsonLikeRust(text)
+  if (!isRecord(raw)) throw new Error('malformed access proof')
+  return requireProofShape(raw)
 }
 
 /** A wallet-provided personal-message signer (e.g. wallet-standard `sui:signPersonalMessage`). */

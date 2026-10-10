@@ -39,8 +39,12 @@ export interface GatewayErrorBody {
  */
 export function parseGatewayError(body: unknown): GatewayErrorBody | null {
   if (typeof body !== 'object' || body === null) return null
-  const { error, code } = body as { error?: unknown; code?: unknown }
+  const error: unknown = 'error' in body ? body.error : undefined
+  const code: unknown = 'code' in body ? body.code : undefined
   if (typeof error !== 'string') return null
-  const known = (GATEWAY_CONFLICT_CODES as readonly unknown[]).includes(code)
-  return known ? { error, code: code as GatewayConflictCode } : { error }
+  return isConflictCode(code) ? { error, code } : { error }
+}
+
+function isConflictCode(code: unknown): code is GatewayConflictCode {
+  return GATEWAY_CONFLICT_CODES.some((known) => known === code)
 }

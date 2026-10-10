@@ -33,6 +33,13 @@ describe('fetchChallenge', () => {
     vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify({ expiresAt: 1 }), { status: 200 })))
     await expect(fetchChallenge('https://gw.example')).rejects.toThrow(/nonce/)
   })
+
+  it('refuses a body that is not a JSON object', async () => {
+    for (const body of [null, [], 'nonce', 7, [{ nonce: 'n', expiresAt: 1 }]]) {
+      vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(body), { status: 200 })))
+      await expect(fetchChallenge('https://gw.example')).rejects.toThrow(/nonce/)
+    }
+  })
 })
 
 describe('fetchChallenge hardening', () => {

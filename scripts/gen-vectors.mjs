@@ -59,6 +59,27 @@ const personalMessageRejects = [
 
 // ── proof tokens ─────────────────────────────────────────────────────────────────────────────
 const token = (o) => Buffer.from(JSON.stringify(o)).toString('base64')
+// Raw-token helpers for the base64 / UTF-8 / JSON layer vectors below. A canonical `proof` JSON, extended
+// with one unknown key where a vector needs a length that leaves base64 padding.
+const PROOF_JSON = JSON.stringify({ address: '0x1', nonce: 'n', signature: 'AAAA' })
+const withUnknownKey = (valueJson) => `${PROOF_JSON.slice(0, -1)},"k":${valueJson}}`
+const rawToken = (bytes) => Buffer.from(bytes).toString('base64')
+const stripPadding = (t) => (t.endsWith('=') ? t.replace(/=+$/, '') : fail('vector needs padded base64'))
+const insertAt = (t, at, ch) => t.slice(0, at) + ch + t.slice(at)
+const urlSafe = (t) => (/[+/]/.test(t) ? t.replace(/\+/g, '-').replace(/\//g, '_') : fail('vector needs + or / in the base64'))
+function withTrailingBits(t) {
+  // Set the lowest bit of the last data symbol: decodes to the same bytes in a lenient decoder, but the
+  // symbol is not the canonical encoding of them.
+  const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/'
+  const body = t.replace(/=+$/, '')
+  if (body.length === t.length) fail('vector needs padded base64')
+  const last = ALPHABET.indexOf(body.at(-1))
+  if (last & 1) fail('last symbol already has its low bit set')
+  return body.slice(0, -1) + ALPHABET[last | 1] + t.slice(body.length)
+}
+function fail(why) {
+  throw new Error(why)
+}
 const proofDecodeRejects = [
   ['oversized', 'A'.repeat(4097)],
   ['non-ASCII nonce', utf8Token({ address: '0x1', nonce: 'nönce', signature: 'AAAA' })],
@@ -76,6 +97,20 @@ const proofDecodeRejects = [
   ['consume digest not a string', token({ address: '0x1', nonce: 'n', signature: 'AAAA', consumeDigest: 7 })],
   ['JSON array', token(['0x1'])],
   ['JSON null', token(null)],
+  // The base64 / UTF-8 / JSON layers underneath the field grammar. The Rust gateway refuses each of these
+  // (canonical padded standard base64, `trim()` at the ends only, strict UTF-8, serde_json's parser), so
+  // every decoder must; each one carries an otherwise valid proof, so only that layer can be the reason.
+  ['unpadded base64', stripPadding(rawToken(withUnknownKey('"a"')))],
+  ['whitespace inside the token', insertAt(rawToken(PROOF_JSON), 8, '\n')],
+  ['padding in the middle of the token', insertAt(rawToken(PROOF_JSON), 8, '=')],
+  ['more padding than base64 allows', rawToken(withUnknownKey('"a"')) + '='],
+  ['non-zero trailing bits in the last base64 symbol', withTrailingBits(rawToken(withUnknownKey('"a"')))],
+  ['URL-safe base64 alphabet', urlSafe(rawToken(withUnknownKey('"~~~???>>>"')))],
+  ['invalid UTF-8 inside an unknown key', rawToken(Buffer.concat([Buffer.from('{"address":"0x1","nonce":"n","signature":"AAAA","'), Buffer.from([0xff, 0xfe]), Buffer.from('":1}')]))],
+  ['UTF-8 byte-order mark before the JSON', rawToken(Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), Buffer.from(PROOF_JSON)]))],
+  ['unpaired surrogate escape in an unknown key', rawToken(`${PROOF_JSON.slice(0, -1)},"\\ud800":1}`)],
+  ['number out of range in an unknown value', rawToken(withUnknownKey('1e999'))],
+  ['JSON nested 128 levels deep', rawToken(withUnknownKey(`${'['.repeat(127)}${']'.repeat(127)}`))],
 ].map(([name, tok]) => ({ name, token: tok }))
 
 // ── signatures ───────────────────────────────────────────────────────────────────────────────
@@ -165,7 +200,7 @@ const out = {
   personalMessageRejects,
   proofDecode: { token: token({ address: '0x1', nonce: 'n', signature: 'AAAA' }), expect: { address: '0x1', nonce: 'n', signature: 'AAAA' } },
   proofDecodeRejects: {
-    description: 'Tokens every decoder must reject before verification (size, ASCII, and the field grammar).',
+    description: 'Tokens every decoder must reject before verification: size, ASCII, the field grammar, and the base64 (canonical padded standard alphabet, no inner whitespace), UTF-8 (strict, no BOM) and JSON (nesting depth 127, no unpaired surrogate escape, no overflowing number) layers underneath it.',
     cases: proofDecodeRejects,
   },
   addressNormalization: {

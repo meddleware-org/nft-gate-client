@@ -33,7 +33,7 @@ const token = await buildAccessProof({ address, challenge, sign, gateway, gateId
 | `fetchChallenge(gateway, opts?)` | `GET /v1/challenge` → `{ nonce, expiresAt }`; https only (loopback http allowed), no redirects, 4 KiB body cap, aborts after `opts.timeoutMs` (10 s) or on `opts.signal` |
 | `personalMessage(context)` | the exact bytes the wallet signs (see below); throws on any non-canonical field |
 | `buildAccessProof({ address, challenge, sign, gateway, gateId, network, consumeDigest? })` | sign the audience-bound message and return the Bearer token |
-| `encodeAccessProof(proof)` / `decodeAccessProof(token)` | base64(JSON) token ↔ `AccessProof`; both enforce the same field grammar and a 4 KiB cap |
+| `encodeAccessProof(proof)` / `decodeAccessProof(token)` | base64(JSON) token ↔ `AccessProof`; both enforce the same field grammar; the decoder also enforces a 4 KiB cap and strict base64 / UTF-8 / JSON (see below) |
 | `gatewayOrigin(url)`, `isNonce(s)`, `isTransactionDigest(s)` | canonical origin; nonce and base58-digest shape checks |
 | `GATEWAY_STATUS`, `GATEWAY_CONFLICT_CODES`, `parseGatewayError(body)` | the gateways' response contract (`409` carries `code: redeemed \| leased`) |
 | types `Challenge`, `AccessProof`, `AccessMessageContext`, `SuiNetwork`, `PersonalMessageSigner` | wire types |
@@ -41,7 +41,6 @@ const token = await buildAccessProof({ address, challenge, sign, gateway, gateId
 
 ## Wire protocol
 
-- **Challenge**: `{ nonce: string, expiresAt: number }`
 - **Challenge**: `{ nonce: string, expiresAt: number }` (nonce: 1-128 characters of `A-Z a-z 0-9 . _ ~ -`)
 - **Signed message** (ASCII, one `key:value` line each):
 
@@ -56,7 +55,11 @@ const token = await buildAccessProof({ address, challenge, sign, gateway, gateId
 
   The gateway rebuilds it from its own origin, gate and network, so a signature is useless at any
   other gateway, gate, network or consume.
-- **Proof token**: `base64(JSON { address, nonce, signature, consumeDigest? })`, fixed field order
+- **Proof token**: `base64(JSON { address, nonce, signature, consumeDigest? })`, fixed field order. The
+  decoder is strict and refuses what the Rust gateway refuses: canonical **padded** standard base64
+  (no unpadded token, no inner whitespace, no URL-safe alphabet, no non-zero trailing bits), well-formed
+  UTF-8 without a byte-order mark, and JSON nested at most 127 levels with no unpaired surrogate escape and
+  no number that overflows (`1e999`). Only whitespace at either end of the token is ignored.
 
 Both gateways in [nft-gate](https://github.com/meddleware-org/nft-gate) verify exactly this format;
 `vectors.json` pins it (`npm run gen:vectors` regenerates it, `npm run check:vectors` checks it is current).

@@ -22,8 +22,12 @@
 - npm `@meddleware/nft-gate-client` **0.0.16**, published 2026-10-08T06:28Z (`dist-tags.latest`), with an
   SLSA v1 provenance attestation on the registry (`dist.attestations.provenance.predicateType` =
   `https://slsa.dev/provenance/v1`, `gitHead` = `e114369`). Git tag `v0.0.16` is at `e114369`.
-- `main` is two commits ahead of the tag and unreleased: `ff6256d` (Dependabot config) and `ed876ba`
-  (Dependabot dev-dependency lockfile bump, 2026-10-09). Neither changes `src/` or the published files.
+- `main` is ahead of the tag and unreleased. The 2026-10-09 commits (`ff6256d` Dependabot config,
+  `ed876ba` dev-dependency lockfile bump) did not change `src/`. The 2026-10-10 fix wave (commit pending)
+  is **0.0.17**: strict base64 / UTF-8 / JSON decoding (F24), type guards in place of the three casts
+  (F25), no URL echo in `gatewayOrigin` errors (F26), `engines`, CI build and lint (F19, F20), eleven new
+  `proofDecodeRejects` vectors. It is not yet tagged or published; until it is, the consumers below run
+  the lenient 0.0.16 decoder.
 - Consumers: `nft-gate/gateway-workers` (`^0.0.16`; imports the decoder and the message derivation; Worker
   redeployed from `main` 2026-10-09 against the 2026-10-09 `access_gate` publication and relay gate),
   `walrus-client` (`^0.0.16`; `fetchChallenge` + `buildAccessProof`) and `docs` (`^0.0.16`).
@@ -33,16 +37,17 @@
   `nft-gate:access:v2` proof built by this package (pass bought on gate `0x316f1bf9…`, consumed, upload
   through the Worker; the indexer shows minted=1 consumed=1).
 
-**Review date:** 2026-10-03; re-verified 2026-10-09
+**Review date:** 2026-10-03; re-verified 2026-10-09; fix wave 2026-10-10
 **Reviewer:** Internal review
 **Severity ceiling:** Medium — the package holds no funds or keys and makes no authorisation decision.
   However, `decodeAccessProof` and `personalMessage` sit **on the live Workers gateway's verification
   path**, and the message format it defines decides what a user's signature can be replayed for. A bypass
   still requires a gateway decision, so nothing here reaches High on its own.
-**Status:** re-verified 2026-10-09 at `ed876ba` (release `0.0.16`, tag `e114369`). Of the 26 findings
-  (F1–F26), 5 are Positive and 21 carry a disposition: 9 RESOLVED, 6 MITIGATED, 1 ADJUDICATED, 4
-  ACCEPTED-RISK, 1 DEFERRED (a pre-mainnet gate). This supersedes the 2026-10-03 pass, which recorded
-  findings only. The audit lives in the package (see *Location* below).
+**Status:** re-verified 2026-10-09 at `ed876ba` (release `0.0.16`, tag `e114369`); fix wave 2026-10-10 on
+  top of it (release `0.0.17`, commit pending, unreleased). Of the 26 findings (F1–F26), 5 are Positive
+  and 21 carry a disposition: 15 RESOLVED, 5 MITIGATED, 1 ADJUDICATED. Nothing is ACCEPTED-RISK or
+  DEFERRED. This supersedes the 2026-10-03 pass, which recorded findings only. The audit lives in the
+  package (see *Location* below).
 
 **Package manager / lockfile:** npm; `package-lock.json` committed (lockfileVersion 3, 176 packages, all
   dev)
@@ -51,7 +56,7 @@
   (`types` = `./dist/index.d.ts`, emitted by `prepublishOnly`) + `vectors.json`
   (`exports["./vectors.json"]`)
 **Runtime targets:** browsers (`browserslist`: `> 0.5%, last 2 versions, not dead`), Node 24 LTS (the
-  workspace decision; CI runs Node 24; no `engines` field, F20), workerd
+  workspace decision; CI runs Node 24; `engines.node` is `>=24` since 0.0.17, F20), workerd
 **Peer dependencies:** none (no runtime dependencies at all)
 
 **Sui SDK:** none at runtime (since 0.0.13). Dev-only: `@mysten/sui` ^2.35.0 (installed 2.35.0, within
@@ -80,7 +85,8 @@
 This audit was relocated on 2026-10-03 from the shared corpus, `docs/audit/nft-gate-client-audit.md`, to
 `nft-gate-client/docs/audit/nft-gate-client-audit.md`. All `F#`/`OQ#` IDs from the 2026-09-18 pass are
 kept, F1–F8 and OQ1–OQ4. The 2026-10-03 pass added F9–F23 and OQ5–OQ7. The 2026-10-09 re-verification
-adds F24–F26. Repo-local audit is canonical (decision).
+adds F24–F26. The 2026-10-10 fix wave resolves F24, F25, F26, F19 and F20 and the base64 residual
+of F10. Repo-local audit is canonical (decision).
 
 The old shared path keeps a pointer stub. The corpus `README.md` index and the `SYNTHESIS.md` links
 (S1, S2) point here. Templates are cited by name and date because workspace-relative links do not
@@ -117,14 +123,21 @@ that were open:
 - **F15, F16** — the response contract is exported, and `vectors.json` is generated, asserted here with an
   independent verifier, published, and consumed by both gateways.
 
+**What changed in the 2026-10-10 fix wave (0.0.17, unreleased).** `decodeAccessProof` is now strict at the
+base64, UTF-8 and JSON layers and makes the same decisions as the Rust gateway (F24, the unclosed part of
+F10); eleven new `proofDecodeRejects` vectors pin it in both gateways' suites. The three narrowing casts
+are type guards (F25), `gatewayOrigin` errors no longer echo the URL (F26), `engines.node` is `>=24`
+(F20), and CI builds the declarations and lints before publish (F19).
+
 **Where residual risk remains** (all Low or Info):
 
-1. **F24 (Low, ACCEPTED-RISK)** — the base64 layer is still lenient (unpadded, whitespace, invalid UTF-8
-   in an unknown key), so the live Workers decoder admits a few tokens the undeployed Rust gateway
-   refuses. The field grammar and every signature check are identical, so this is not a bypass.
+1. **Rollout of 0.0.17.** The strict decoder only protects once the Worker pins `^0.0.17` and its vendored
+   vectors are synced; until then the live Workers decoder is the lenient 0.0.16 (F24 residual, not a
+   bypass: the field grammar and every signature check are identical).
 2. **F11, F14, F15, F17, F18 (MITIGATED)** — small remainders: no `cache: 'no-store'`, a bad address or
    an expired challenge still reaches the wallet prompt, walrus-client keeps its own conflict helper with
-   a message-regex fallback, a few documentation and manifest nits, and a digest check by shape only.
+   a message-regex fallback, `walrus-relay`'s package description (other repo), and a digest check by
+   shape only.
 3. **Wallet display** — audience binding only helps if the user or wallet notices a wrong origin line
    (Risks). A phishing site can still ask a victim to sign a message that names the real gateway.
 
@@ -143,8 +156,7 @@ that were open:
 - `npm audit` gates both CI and publish; OIDC publishing with a provenance attestation verified on the
   registry; Dependabot grouped weekly updates in place.
 
-**Posture.** Low-risk library code. The one pre-mainnet gate left is the inline justification of three
-narrowing casts (F25). External review is a maintainer item (`OPERATOR_TASKS.md`, "Funding, grants and an
+**Posture.** Low-risk library code. The only Section D gate left is external review, a maintainer item (`OPERATOR_TASKS.md`, "Funding, grants and an
 external audit — after launch").
 
 ---
@@ -162,7 +174,7 @@ unambiguous and audience-bound.
 | A2 | Gateway (`/v1/challenge`) | the nonce the user will sign | choose the nonce | https-only host check; nonce alphabet `[A-Za-z0-9._~-]{1,128}` (no whitespace, so no extra message line); redirects refused; body capped at 4 KiB while streaming |
 | A3 | On-path attacker / hostile network | traffic if TLS is downgraded | substitute the nonce | https only, and a redirect is an error (F11) |
 | A4 | Phishing site / other dApp sharing the wallet | a sign prompt | have the user sign a message that names the **real** gateway | the message names origin, gate, network and consume digest, so it is useless at any other audience; the wallet display is the remaining control (F9, Risks) |
-| A5 | Attacker submitting tokens to a gateway | the token string | exercise `decodeAccessProof` on the Workers gateway | 4096-char cap, ASCII contract, field grammar, field-by-field copy; lenient base64 layer (F24) |
+| A5 | Attacker submitting tokens to a gateway | the token string | exercise `decodeAccessProof` on the Workers gateway | 4096-char cap, ASCII contract, field grammar, field-by-field copy; strict base64 / UTF-8 / JSON layers mirroring the Rust decoder (F24) |
 | A6 | Consuming app (walrus-client, gateways) | how outputs are used | mis-handle gateway responses | `contract.ts` defines the contract; walrus-client has not adopted the helper (F15) |
 | A7 | npm registry / dependency authors | tarball; dev toolchain | ship altered code | lockfile; `npm audit`; OIDC provenance; zero runtime deps |
 | A8 | Maintainer / CI | publish | release a version | tag-gated, OIDC, idempotent (F21) |
@@ -186,7 +198,7 @@ signing key and no session.
 | Registry (npm) | the tarball | lockfile integrity hashes; provenance on publish |
 | CI runner | build output, the publish token exchange | base §B.2 (below) |
 | Maintainer | what is published | OIDC trusted publishing |
-| Untrusted inputs: the gateway challenge response, proof tokens (gateway side), caller strings | shapes and sizes | `fetchChallenge` checks (F12 resolved); `requireProofShape` / `decodeAccessProof` checks (F10, residual F24) |
+| Untrusted inputs: the gateway challenge response, proof tokens (gateway side), caller strings | shapes and sizes | `fetchChallenge` checks (F12 resolved); `requireProofShape` / `decodeAccessProof` checks (F10, F24) |
 | Embedding host | globals (`fetch`, `AbortSignal.any`, `atob`/`btoa`, `TextEncoder`) | runtime floor: Node 24 LTS and evergreen browsers (F20) |
 
 ### On-chain dependency matrix (SUI_CLIENT lens)
@@ -211,7 +223,7 @@ Critical / High / Medium / Low / Info / Positive (unchanged across the corpus).
 
 **In scope (HEAD `ed876ba`; release `0.0.16` = tag `v0.0.16` at `e114369`; re-verified 2026-10-09):**
 
-- `src/{index,types,challenge,proof,contract}.ts`
+- `src/{index,types,challenge,proof,contract}.ts` (about 490 lines after 0.0.17)
 - `tests/{challenge,proof,contract,vectors}.test.ts`, `vectors.json`, `scripts/gen-vectors.mjs`
 - `package.json`, `package-lock.json`, `tsconfig*.json`, `vitest.config.ts`, `eslint.config.ts`,
   `.gitignore`
@@ -236,14 +248,14 @@ Critical / High / Medium / Low / Info / Positive (unchanged across the corpus).
 | Command | Result |
 | --- | --- |
 | `npm ci` | clean; 0 vulnerabilities |
-| `npx vitest run` | **80 tests passed** (4 files: `challenge` 11, `contract` 3, `proof` 13, `vectors` 53) |
-| `npx tsc --noEmit` / `npx eslint .` | clean / clean |
+| `npx vitest run` | **80 tests passed** (4 files: `challenge` 11, `contract` 3, `proof` 13, `vectors` 53); **101 after the 2026-10-10 fix wave** (`challenge` 12, `contract` 3, `proof` 22, `vectors` 64) |
+| `npx tsc --noEmit` / `npx eslint .` | clean / clean (also clean on 2026-10-10) |
 | `npm audit --audit-level=high` | 0 vulnerabilities |
 | `npm run check:vectors` | clean (`vectors.json` equals the generator's output) |
 | `npm run build` | emits `dist/{index,types,challenge,proof,contract}.d.ts`; `decodeAccessProof` now carries its doc comment (F17) |
 | `npm pack --dry-run` | 15 files: `CHANGELOG.md`, `LICENSE`, `README.md`, `package.json`, `vectors.json`, `src/*.ts` (5), `dist/*.d.ts` (5); no tests, config or env files |
 | `npm view @meddleware/nft-gate-client` | 0.0.16 (`latest`); `dist.attestations.provenance.predicateType` = `https://slsa.dev/provenance/v1` |
-| Decoder probe (`decodeAccessProof` on crafted tokens) | accepted: canonical, unpadded, whitespace-split, extra unknown key, invalid UTF-8 inside an unknown key. Rejected: non-string `consumeDigest`. The `consume_digest` key is ignored. (F10, F24) |
+| Decoder probe (`decodeAccessProof` on crafted tokens) | 2026-10-09 (0.0.16): accepted canonical, unpadded, whitespace-split, extra unknown key, invalid UTF-8 inside an unknown key. Rejected: non-string `consumeDigest`. The `consume_digest` key is ignored. (F10, F24). 2026-10-10 (0.0.17): the unpadded, whitespace, invalid-UTF-8 rows are refused; see the differential run in the F24 evidence |
 
 The review left no tracked file changed. `dist/` and `node_modules/` are git-ignored, and the probe script
 lived outside the repository.
@@ -290,7 +302,7 @@ ASCII check in `requireProofShape`).
   `tests/vectors.test.ts`.
 - OQ2 decided: ASCII contract.
 
-Re-verified 2026-10-09. The remaining base64-layer leniency is F24.
+Re-verified 2026-10-09. The base64-layer leniency that remained then is closed in 0.0.17 (F24).
 
 ### F3 — `decodeAccessProof` did not bound input size
 
@@ -428,9 +440,9 @@ gateway; only the wallet display and the user noticing do (Risks, *Wallet displa
 
 ### F10 — `decodeAccessProof` accepts tokens the Rust gateway rejects, and vice versa
 
-**Severity:** Low   **Disposition:** MITIGATED (field grammar and digest typing resolved in 0.0.16; the
-base64 and UTF-8 layer remains, tracked as F24)
-**Where:** `src/proof.ts:115-134` (`requireProofShape`) and `:155-162` (`decodeAccessProof`) versus
+**Severity:** Low   **Disposition:** RESOLVED (field grammar and digest typing in 0.0.16; the base64 and
+UTF-8 layer in 0.0.17, commit pending, tracked as F24)
+**Where:** `src/proof.ts:192-214` (`requireProofShape`) and `:232-244` (`decodeAccessProof`) versus
 `nft-gate/gateway-rust/src/proof.rs:144-205`.
 
 **Issue:** The two gateways got different parse results for the cases below.
@@ -441,8 +453,8 @@ base64 and UTF-8 layer remains, tracked as F24)
 | `"consume_digest"` snake_case key | ignored | honoured | **fixed**: ignored by both (Rust reads only `consumeDigest`) |
 | empty or shape-invalid address / nonce / signature | accepted | accepted | **fixed**: rejected by both |
 | non-base58 / non-ASCII `consumeDigest` | accepted | accepted | **fixed**: rejected by both |
-| Unpadded base64, whitespace inside the token, non-canonical trailing bits | accepted (`atob`) | rejected | **open**, F24 |
-| Invalid UTF-8 in the JSON | replaced with U+FFFD | rejected | **open**, F24 (a bad byte inside a checked field fails the grammar; inside an unknown key it passes here) |
+| Unpadded base64, whitespace inside the token, non-canonical trailing bits | accepted (`atob`) | rejected | **fixed in 0.0.17**: rejected by both (F24) |
+| Invalid UTF-8 in the JSON | replaced with U+FFFD | rejected | **fixed in 0.0.17**: rejected by both (F24) |
 
 **Impact:** It was the "identical decisions" drift the vectors exist to stop. Fixed for everything that
 reaches a decision, because the field grammar is now one definition: `ADDRESS`, `NONCE`, `SIGNATURE`,
@@ -454,7 +466,7 @@ and fields are still verified.
 Sixteen `proofDecodeRejects` vectors (oversized, non-ASCII nonce/address, empty address/nonce/signature,
 address without `0x` / not hex / over 64 digits, nonce with a space, signature not base64, digest not
 base58 / empty / not a string, JSON array, JSON null) are asserted by `tests/vectors.test.ts` and by both
-gateways. The base64-layer rows were not made strict; see F24 for the decision.
+gateways. The base64-layer rows were left lenient in 0.0.16 and closed in 0.0.17 with eleven more vectors; see F24.
 
 ### F11 — `fetchChallenge` follows redirects and may serve a cached nonce
 
@@ -598,7 +610,8 @@ vector differed from it, and `SECURITY.md` overstated the control.
 
 ### F17 — Documentation accuracy: orphaned JSDoc, stale comments, undeclared runtime floor
 
-**Severity:** Info   **Disposition:** MITIGATED (JSDoc and wording fixed in 0.0.16; small nits remain)
+**Severity:** Info   **Disposition:** MITIGATED (JSDoc and wording fixed in 0.0.16; the README and
+`AGENTS.md` nits fixed in 0.0.17; one wording item remains in another repo)
 **Where:**
 
 - `src/proof.ts:143-155`. The `decodeAccessProof` doc block now sits on the function and
@@ -607,19 +620,19 @@ vector differed from it, and `SECURITY.md` overstated the control.
 - `src/types.ts` `Challenge.nonce` now states the real alphabet (1–128 characters of `A-Za-z0-9._~-`).
   **Fixed.**
 - `tests/proof.test.ts` stale paths: gone with the local vector (F16). **Fixed.**
-- `README.md` "Wire protocol" lists the `Challenge` bullet twice (one without the nonce alphabet).
-  **Open**, doc nit.
-- `AGENTS.md` "Node.js ≥ 22" while the workspace decision is Node 24 LTS only, and `package.json` has no
-  `engines`. **Open**, tracked with F20.
+- `README.md` "Wire protocol" listed the `Challenge` bullet twice (one without the nonce alphabet).
+  **Fixed** in 0.0.17 (one bullet, with the alphabet).
+- `AGENTS.md` said "Node.js ≥ 22" while the workspace decision is Node 24 LTS only, and `package.json` had
+  no `engines`. **Fixed** in 0.0.17 (`AGENTS.md` ≥ 24; `engines`, see F20).
 - Outside this repo: `walrus-relay/package.json` describes itself as "Built on …
   @meddleware/nft-gate-client" but depends only on `@meddleware/walrus-client` (it reaches this package
-  transitively). **Open**, wording in that repo.
+  transitively). **Open**, wording in that repo (orchestrator note; not changed from here).
 
 **Issue / Impact:** These can mislead integrators and the planned TypeDoc reference (`dev.` site). This is
 the TS lens §A *Accurate comments* class.
 
-**Remediation / evidence:** The three open items are one-line edits in this and one other repo. Nothing
-changes behaviour.
+**Remediation / evidence:** The two items in this repo are fixed in 0.0.17 (docs only). The third is a
+one-line edit in `walrus-relay`. Nothing changes behaviour.
 
 ### F18 — `isTransactionDigest` checks shape only, not the decoded length
 
@@ -641,8 +654,9 @@ gateway's chain lookup is the authority.
 
 ### F19 — CI gaps: no build in Node CI, `--if-present` everywhere, no lint before publish
 
-**Severity:** Info   **Disposition:** ACCEPTED-RISK
-**Where:**
+**Severity:** Info   **Disposition:** RESOLVED (2026-10-10: the `--if-present` flags were already gone;
+Node CI now builds and the publish `verify` job lints; commit pending)
+**Where (as recorded 2026-10-09):**
 
 - `.github/workflows/node-ci.yml` (`lint:js --if-present`; no `npm run build`).
 - `npm-publish.yml` `verify` job (`type-check --if-present`, `test --if-present`, `build --if-present`;
@@ -654,17 +668,22 @@ gateway's chain lookup is the authority.
 - `--if-present` would silently pass if a script were renamed or removed.
 - A tag on a commit that never passed Node CI would publish unlinted code.
 
-**Remediation / evidence:** Accepted, with these controls in place. The publish `verify` job runs
+**Remediation / evidence:** Fixed 2026-10-10. Commit `4cdf244` had already dropped `--if-present`, so a
+renamed script now fails the job. This wave adds `npm run build` to `node-ci.yml` ("Build (declarations)")
+and `npm run lint` to the publish `verify` job, so a declaration failure or a lint error is caught on
+every push to `main` and again before a tag publishes. `npm pack --dry-run` with an asserted file list
+(S6) stays an optional suggestion. The controls that were in place when it was accepted: The publish `verify` job runs
 `npm audit`, type-check, `check:vectors`, tests **and** `npm run build`, so a declaration failure blocks
 the publish before the npm job; `prepublishOnly` builds again. Node CI (lint, type-check, vectors, tests,
 audit) runs on every push to `main`, and tags are cut from `main`. The scripts are exercised by every
 release, so a rename would fail the release tests. Dropping `--if-present`, adding `npm pack --dry-run`
-and a lint step to `verify` stays on the suggestions list (S6).
+and a lint step to `verify` are now done except the pack check (S6).
 
 ### F20 — Runtime floor for `AbortSignal.any` / `AbortSignal.timeout` is undeclared
 
-**Severity:** Info   **Disposition:** ACCEPTED-RISK
-**Where:** `src/challenge.ts:63-64`; `package.json` `browserslist` and no `engines`.
+**Severity:** Info   **Disposition:** RESOLVED (0.0.17: `engines.node` `>=24`; the browser floor stays
+the `browserslist` query; commit pending)
+**Where:** `src/challenge.ts:63-64`; `package.json` `browserslist` and (until 0.0.17) no `engines`.
 
 **Issue:** `AbortSignal.any` needs Chrome 116 / Firefox 124 / Safari 17.4 / Node 20.3, and
 `AbortSignal.timeout` needs Safari 16. On an older browser, passing `opts.signal` throws `TypeError:
@@ -672,10 +691,12 @@ AbortSignal.any is not a function` before any request is made.
 
 **Impact:** The challenge fetch breaks on older browsers, but only when the caller passes a signal.
 
-**Remediation / evidence:** Accepted. The workspace decision is Node 24 LTS only, CI runs Node 24, and the
-browser floor is the evergreen set the `> 0.5%, last 2 versions` query selects in 2026, all of which
-support both APIs. The failure is loud (a `TypeError` before any request), not silent. Declaring
-`"engines": { "node": ">=24" }` and aligning `AGENTS.md` (F17) remains a one-line manifest suggestion.
+**Remediation / evidence:** The workspace decision is Node 24 LTS only and CI runs Node 24, so 0.0.17
+declares `"engines": { "node": ">=24" }` (also in the lockfile root entry) and `AGENTS.md` says Node ≥ 24
+(F17). The browser floor is the evergreen set the `> 0.5%, last 2 versions` query selects in 2026, all of
+which support both APIs; the failure on an older one is loud (a `TypeError` before any request), not
+silent, so no code change is needed there. `engines` is advisory for consumers (a warning, not an error,
+unless they set `engine-strict`).
 
 ### F21 — Positive: release chain and packaging
 
@@ -720,56 +741,91 @@ support both APIs. The failure is loud (a `TypeError` before any request), not s
 - No `console` output, so tokens and signatures never reach logs.
 - Errors carry no token or signature material. The oversized-token message includes only the length.
 - `strict` and `noUncheckedIndexedAccess` are on, and there are no `any` or `!` in `src/`.
-  - Three `as` casts remain, each directly after a guard: `challenge.ts:77`, `proof.ts:161`,
-    `contract.ts:45`. They carry no inline justification comment, which the TS lens asks for (F25).
+  - The three narrowing casts the 2026-10-09 pass found are type guards since 0.0.17 (F25); no `as`
+    remains in `src/` other than `as const`.
 
-### F24 — Base64 layer still lenient: unpadded, whitespace and invalid UTF-8 in unknown keys
+### F24 — Base64 layer was lenient: unpadded, whitespace and invalid UTF-8 in unknown keys
 
-**Severity:** Low   **Disposition:** ACCEPTED-RISK (residual of F10; revisit before the Rust gateway is
-deployed or at the pre-mainnet review)
-**Where:** `src/proof.ts:108-112` (`fromBase64`: `atob` + non-fatal `TextDecoder`) and `:155-162`, versus
-`nft-gate/gateway-rust/src/proof.rs:157-160` (`BASE64_STANDARD.decode(token.trim())`, then
+**Severity:** Low   **Disposition:** RESOLVED (0.0.17, commit pending; OQ8 decided: strict, in this decoder
+and pinned by vectors both gateways consume)
+**Where:** `src/proof.ts:104-175` (`fromBase64`, `requireJsonLikeRust`) and `:232-244` (`decodeAccessProof`),
+versus `nft-gate/gateway-rust/src/proof.rs:157-160` (`BASE64_STANDARD.decode(token.trim())`, then
 `serde_json::from_slice`).
 
-**Issue:** Probe on 2026-10-09: `decodeAccessProof` accepts an unpadded token, a token with whitespace
-inside it, and a token whose JSON has invalid UTF-8 inside an **unknown** key. The Rust decoder refuses all
-three (canonical padding required, outer `trim()` only, strict UTF-8). Non-canonical trailing bits behave
-the same way. No `proofDecodeRejects` vector covers these rows.
+**Issue:** Probe on 2026-10-09: `decodeAccessProof` (0.0.16) accepted an unpadded token, a token with
+whitespace inside it, and a token whose JSON has invalid UTF-8 inside an **unknown** key. The Rust decoder
+refuses all three (canonical padding required, outer `trim()` only, strict UTF-8). Non-canonical trailing
+bits behaved the same way. No `proofDecodeRejects` vector covered these rows.
 
-**Impact:** The same token can be admitted by the Workers gateway and refused by Rust, so the "identical
-decisions" contract does not hold for these inputs. It is not a bypass: both gateways apply the same field
+**Impact:** The same token could be admitted by the Workers gateway and refused by Rust, so the "identical
+decisions" contract did not hold for these inputs. It was not a bypass: both gateways apply the same field
 grammar and verify the signature, and a bad byte inside a *checked* field fails the grammar on both. Only
-the Workers gateway is deployed; the Rust gateway is kept at parity but undeployed (decision), and Workers
-is the stricter side for everything that decides access.
+the Workers gateway is deployed; the Rust gateway is kept at parity but undeployed (decision).
 
-**Remediation / evidence:** Accepted as a Low residual. The fix, if wanted, is one decision applied in
-both gateways: strict base64 (`^[A-Za-z0-9+/]*={0,2}$`, `length % 4 == 0`, re-encode equality), a fatal
-`TextDecoder`, and `proofDecodeRejects` vectors for each row. This is the unclosed part of F10.
+**Remediation / evidence:** Fixed in 0.0.17 as one decision (OQ8) applied to the decoder, with vectors for
+both gateways, and no change to the Rust source:
+
+- `decodeAccessProof` now refuses what Rust refuses: it ignores only Unicode `White_Space` at the two ends
+  of the token (Rust's `trim()`; the set is spelled out because `String.prototype.trim` also strips U+FEFF
+  and misses U+0085); it requires canonical padded standard base64 (`atob`, then `btoa(decoded) ===
+  input`, which rejects unpadded input, inner whitespace or `=`, the URL-safe alphabet, over-long padding
+  and non-zero trailing bits); it decodes UTF-8 with `fatal: true, ignoreBOM: true` (invalid sequences and
+  a byte-order mark both fail, as `serde_json::from_slice` does).
+- A differential run against the real Rust decoder (`proof.rs` compiled unchanged with `base64 0.22.1` and
+  `serde_json 1.0.151` from the gateway's lockfile) over about 140 hand-written cases and 90 000 mutated
+  tokens found three more places where `JSON.parse` is more lenient than serde_json, all inside keys or
+  values the decoder ignores: JSON nested 128 levels or deeper (serde_json's recursion limit), an unpaired
+  surrogate `\uD800` escape, and a number that overflows to infinity (`1e999`). A reviver cannot see them
+  when a later duplicate key overwrites the value, so `requireJsonLikeRust` is a short lexical pass over
+  the text that already parsed. After it the run shows zero divergences.
+- Eleven new `proofDecodeRejects` vectors (16 → 27), generated by `scripts/gen-vectors.mjs` (each carries an
+  otherwise valid proof, so only its layer can be the reason): unpadded base64; whitespace inside the
+  token; `=` in the middle of the token; more padding than base64 allows; non-zero trailing bits in the
+  last symbol; URL-safe alphabet; invalid UTF-8 inside an unknown key; a UTF-8 byte-order mark; an unpaired
+  surrogate escape in an unknown key; a number out of range in an unknown value; JSON nested 128 levels
+  deep. `tests/vectors.test.ts` asserts each ("proofDecode refuses: …"). Their reason was confirmed: the
+  0.0.16 decoder accepted the eight that depend on the new strictness (the other three, `=` in the
+  middle, over-long padding and the URL-safe alphabet, it already refused).
+- `tests/proof.test.ts` "decodeAccessProof is strict" (8 tests) pins the same rows, plus the accept side
+  (all three padding classes, whitespace at the ends, 127-deep JSON, a paired surrogate escape, `1e-999`, a
+  big integer, `true`/`false`/`null` in unknown values) and that every token `encodeAccessProof` emits
+  round-trips (nonce lengths 1–128, signature up to 1024 characters plus padding, the largest token is far
+  under the 4096 cap; the encoder's `btoa` output is always canonical padded base64).
+- The Rust gateway needs no new test: `conformance_shared_vectors` consumes `proofDecodeRejects.cases`
+  through `include_str!`, and it passes unchanged against the new `vectors.json` (run on a scratch copy,
+  2026-10-10). Its decoder was not edited.
+- **Rollout:** the strictness reaches the live Worker only when `gateway-workers` pins `^0.0.17` and runs
+  `node scripts/sync-vectors.mjs` (orchestrator step). Clients that build tokens with this package emit
+  canonical tokens, so no legitimate caller is affected.
 
 ### F25 — Narrowing casts at trust boundaries carry no inline justification
 
-**Severity:** Info   **Disposition:** DEFERRED (pre-mainnet gate in Section D: "no `as` at trust
-boundaries without an inline justification"; maintainer code edit)
-**Where:** `src/challenge.ts:77` (`as Record<string, unknown>`), `src/proof.ts:161`
+**Severity:** Info   **Disposition:** RESOLVED (0.0.17, commit pending: type guards replace the casts)
+**Where (as recorded 2026-10-09):** `src/challenge.ts:77` (`as Record<string, unknown>`), `src/proof.ts:161`
 (`as Record<string, unknown>`), `src/contract.ts:45` (`as GatewayConflictCode`).
 
 **Issue:** The TS lens §A *Assertions at trust boundaries* asks every `as` on a path that handles
-untrusted data to carry a justification. Each cast here immediately follows the guard that makes it sound
-(an object check, or `includes` against the known code list), but no comment says so.
+untrusted data to carry a justification. Each cast followed the guard that made it sound (an object
+check, or `includes` against the known code list), but no comment said so.
 
-**Impact:** Reviewer clarity only; the code is correct.
+**Impact:** Reviewer clarity only; the code was correct.
 
-**Remediation / evidence:** Add a one-line comment beside each cast (or replace the first two with a small
-type guard) — suggestion S4. Carried over from the 2026-10-03 pass, where it was a suggestion and a
-pre-mainnet checkbox; 0.0.16 added one more cast (`contract.ts:45`).
+**Remediation / evidence:** The better fix was removing the casts. `isRecord(x): x is Record<string,
+unknown>` (`src/proof.ts:31`, internal, not re-exported) now serves `fetchChallenge` (`challenge.ts:77`)
+and `decodeAccessProof`; `parseGatewayError` narrows with `in` and a `isConflictCode` predicate
+(`contract.ts:40-50`) instead of the destructuring cast, the `includes` widening cast and the
+`GatewayConflictCode` cast. `grep ' as ' src/` finds only `as const`. Tests: "refuses a body that is not a
+JSON object" (`tests/challenge.test.ts`: null, array, string, number, array holding a challenge) and the
+widened `parseGatewayError` cases (`tests/contract.test.ts`: `{ code }` without `error`, an array holding
+an error, a non-string code); the decode paths are covered by the vectors and `tests/proof.test.ts`.
 
 ### F26 — `gatewayOrigin` error messages echo the gateway string, including any userinfo
 
-**Severity:** Info   **Disposition:** ACCEPTED-RISK
-**Where:** `src/proof.ts:42-55` (`invalid gateway URL: ${gateway}`, `gateway URL must use https:
-${gateway}`).
+**Severity:** Info   **Disposition:** RESOLVED (0.0.17, commit pending: the input is no longer echoed)
+**Where (as recorded 2026-10-09):** `src/proof.ts:42-55` (`invalid gateway URL: ${gateway}`, `gateway URL
+must use https: ${gateway}`).
 
-**Issue:** The two messages include the caller's gateway string. For `http://user:pw@host` the https
+**Issue:** The two messages included the caller's gateway string. For `http://user:pw@host` the https
 check fires first, so the userinfo would appear in the error text. (The credentials check itself does not
 echo.) TS lens §A *Secrets in output*.
 
@@ -777,9 +833,12 @@ echo.) TS lens §A *Secrets in output*.
 URL is already rejected. A secret would reach a log only if an operator put one in a URL that is then
 refused.
 
-**Remediation / evidence:** Accepted. If tightened, report the host only or the fixed text without the
-URL. No test pins the message text beyond `/https/` and `/invalid gateway URL/`
-(`tests/proof.test.ts:52-59`).
+**Remediation / evidence:** The messages are now fixed text: `invalid gateway URL` and `gateway URL must
+use https (http is allowed for a loopback host only)` (`src/proof.ts:47-60`); nothing from the input is
+included, which also covers `fetchChallenge`, `buildAccessProof` and `personalMessage`, which call it.
+Test: "never echoes the input in an error (it may carry userinfo)" (`tests/proof.test.ts`: four inputs with
+a password, none of the error texts contains the password or the host); the existing assertions on
+`/https/` and `/invalid gateway URL/` still hold.
 
 ---
 
@@ -787,25 +846,25 @@ URL. No test pins the message text beyond `/https/` and `/invalid gateway URL/`
 
 | # | Invariant | Enforced / asserted at | Proven by | Status |
 | --- | --- | --- | --- | --- |
-| I1 | Signed message is exactly the v2 multi-line ASCII message (origin, gate, network, nonce, optional consume) | `proof.ts:4, 57-66, 91-96` | `tests/proof.test.ts:23-50`; vectors `personalMessage` (2) and `personalMessageRejects` (13), asserted in `tests/vectors.test.ts` | HOLDS |
-| I2 | Token = `base64(JSON{address,nonce,signature,consumeDigest?})`, fixed field order | `proof.ts:101-105, 139-141, 195-205` | "is btoa(JSON) with the documented key order" (`:71`); vector `proofDecode`, signature-vector `proofToken` round trips | HOLDS |
-| I3 | Every decoder (this one and Rust) makes identical parse decisions | `proof.ts:115-134, 155-162` vs `gateway-rust/src/proof.rs:144-205` | 16 `proofDecodeRejects` vectors consumed by both | HOLDS for the field grammar; GAP at the base64 layer — F24 (accepted) |
+| I1 | Signed message is exactly the v2 multi-line ASCII message (origin, gate, network, nonce, optional consume) | `proof.ts:4, 63-72, 97-104` | `tests/proof.test.ts:23-50`; vectors `personalMessage` (2) and `personalMessageRejects` (13), asserted in `tests/vectors.test.ts` | HOLDS |
+| I2 | Token = `base64(JSON{address,nonce,signature,consumeDigest?})`, fixed field order | `proof.ts:107-112, 216-218, 256-279` | "is btoa(JSON) with the documented key order" (`:71`); vector `proofDecode`, signature-vector `proofToken` round trips | HOLDS |
+| I3 | Every decoder (this one and Rust) makes identical parse decisions | `proof.ts:104-175, 192-214, 232-244` vs `gateway-rust/src/proof.rs:144-205` | 27 `proofDecodeRejects` vectors consumed by both; differential run against the real Rust decoder, 0 divergences in about 90 000 mutated tokens | HOLDS from 0.0.17 (field grammar and the base64 / UTF-8 / JSON layers) — F10, F24 |
 | I4 | The client never verifies or decides | `decodeAccessProof` structural only | review | HOLDS |
-| I5 | The client never holds keys | `PersonalMessageSigner` injection (`proof.ts:165-205`) | review | HOLDS |
+| I5 | The client never holds keys | `PersonalMessageSigner` injection (`proof.ts:244-279`) | review | HOLDS |
 | I6 | No hardcoded addresses, secrets or runtime dependencies | `package.json` (no `dependencies`); `src/` | review; `npm pack` contents; `npm ls --omit=dev` empty | HOLDS |
 | I7 | Proof address is canonicalised before any comparison | gateways (`normalizeAddress`/`normalize_address`) | `addressNormalization` vectors (3), both gateways | HOLDS (via gateways — F1) |
-| I8 | Token encoding UTF-8 safe; ASCII contract on both sides | `proof.ts:101-112, 121` | non-ASCII rejection test; vectors "non-ASCII nonce/address" | HOLDS |
-| I9 | Decode is bounded before parsing | `proof.ts:155-157` | "rejects malformed tokens" (`:88`); vector "oversized" | HOLDS |
-| I10 | Parsing is pollution-safe (field-by-field copy) | `proof.ts:115-134` | review; unknown keys ignored (probe) | HOLDS (code-only) |
+| I8 | Token encoding UTF-8 safe; ASCII contract on both sides; decoding strict UTF-8 | `proof.ts:107-142, 192-214` | non-ASCII rejection test; vectors "non-ASCII nonce/address" | HOLDS |
+| I9 | Decode is bounded before parsing | `proof.ts:232-236` | "rejects malformed tokens" (`:88`); vector "oversized" | HOLDS |
+| I10 | Parsing is pollution-safe (field-by-field copy) | `proof.ts:192-214` | review; unknown keys ignored (probe) | HOLDS (code-only) |
 | I11 | Challenge fetched only over https, with a timeout, no redirects | `challenge.ts:10-14, 63-65` | hardening tests (`:41-66`, `:101`) | HOLDS (cache mode unset — F11) |
 | I12 | Challenge response size-checked before buffering | `challenge.ts:17-44` | `tests/challenge.test.ts:80, 101` | HOLDS |
 | I13 | Challenge response fully validated (nonce alphabet + positive expiry) | `challenge.ts:78-84` | `:22`, `:80` | HOLDS |
-| I14 | The wallet is prompted only for a proof the gateways can accept | `proof.ts:177-205` | "refuses malformed inputs before asking the wallet to sign" (`:120`) | PARTLY — bad address / expired challenge reach the prompt (F14) |
-| I15 | The signed message identifies its audience (origin, gate, network, consume) | `proof.ts:57-66, 91-96` | vectors `audienceMismatch` (8, each bound field) with an independent verifier | HOLDS (wallet display is a Risk) — F9 |
+| I14 | The wallet is prompted only for a proof the gateways can accept | `proof.ts:256-279` | "refuses malformed inputs before asking the wallet to sign" (`:120`) | PARTLY — bad address / expired challenge reach the prompt (F14) |
+| I15 | The signed message identifies its audience (origin, gate, network, consume) | `proof.ts:63-72, 97-104` | vectors `audienceMismatch` (8, each bound field) with an independent verifier | HOLDS (wallet display is a Risk) — F9 |
 | I16 | The response contract (status, body, conflict codes) is defined once | `contract.ts` | `tests/contract.test.ts` | HOLDS here; walrus-client adoption pending — F15 |
 | I17 | `SECURITY.md` matches the code | `SECURITY.md` invariants 1–5 | review 2026-10-09 | HOLDS |
-| I18 | Signed-challenge protocol: versioned, domain-separated, ASCII, verifier rebuilds from its own configuration, shared vectors with negatives for every bound field (AUTH) | `proof.ts:4, 57-66`; gateway `verify` | `audienceMismatch`, `negativeSignatures` (8), `zip215`; both gateways consume the same file | HOLDS — F9, F16 |
-| I19 | No token, signature or proof reaches logs or errors | `src/` has no `console`; error texts carry no field values except the gateway URL | review | HOLDS (F26 for the URL) |
+| I18 | Signed-challenge protocol: versioned, domain-separated, ASCII, verifier rebuilds from its own configuration, shared vectors with negatives for every bound field (AUTH) | `proof.ts:4, 63-72`; gateway `verify` | `audienceMismatch`, `negativeSignatures` (8), `zip215`; both gateways consume the same file | HOLDS — F9, F16 |
+| I19 | No token, signature or proof reaches logs or errors | `src/` has no `console`; error texts carry no field values (the gateway URL is no longer echoed since 0.0.17) | review; `tests/proof.test.ts` "never echoes the input in an error" | HOLDS (F26) |
 
 ---
 
@@ -818,7 +877,7 @@ so consumers inherit nothing from this package.
 
 | Dependency | Pinned (installed) | Liveness dependency? | CVE / audit status | Notes |
 | --- | --- | --- | --- | --- |
-| *(runtime)* none | — | — | — | uses platform globals only: `fetch`, `AbortSignal.any`/`timeout`, `TextEncoder`/`TextDecoder`, `atob`/`btoa` (F20, F24) |
+| *(runtime)* none | — | — | — | uses platform globals only: `fetch`, `AbortSignal.any`/`timeout`, `TextEncoder`/`TextDecoder` (fatal mode), `atob`/`btoa` (F20, F24) |
 | `typescript` (dev) | `~6.0.3` (6.0.3) | build (declarations) | clean | 7.0.2 available; TypeScript 7 deferred (decision) |
 | `vitest` (dev) | `~5.0.2` (5.0.2) | tests | clean | 5.0.3 available (Dependabot) |
 | `eslint` / `typescript-eslint` / `jiti` (dev) | `^10.11.0` / `^8.70.1` / `^2.7.0` (10.11.0 / 8.70.1 / 2.7.0) | lint | clean | newer patch releases pending in Dependabot |
@@ -933,10 +992,10 @@ decode", because the Workers gateway imports it, and it publishes the vectors bo
 | Behaviour | This package | Rust gateway | Shared vector | Tracked |
 | --- | --- | --- | --- | --- |
 | Message bytes (v2: origin, gate, network, nonce, consume) | `personalMessage` | `personal_message` | `personalMessage`, `personalMessageRejects`, `audienceMismatch` ✓ | F9 |
-| Field grammar (address, nonce, signature, digest) | `requireProofShape` | `decode_access_proof` | `proofDecodeRejects` (16) ✓ | F10 |
+| Field grammar (address, nonce, signature, digest) | `requireProofShape` | `decode_access_proof` | `proofDecodeRejects` (27) ✓ | F10 |
 | `consumeDigest` type / `consume_digest` key | non-string rejected; snake key ignored | same | ✓ | F10 |
-| base64 strictness (padding, whitespace, trailing bits) | lenient (`atob`) | strict (`STANDARD`) | none | F24 (accepted) |
-| UTF-8 strictness | replacement characters | strict | none | F24 |
+| base64 strictness (padding, whitespace, trailing bits, alphabet) | strict since 0.0.17 (canonical padded, ends trimmed) | strict (`STANDARD` + `trim()`) | `proofDecodeRejects` ✓ | F24 |
+| UTF-8 and JSON strictness (invalid UTF-8, BOM, depth 128, lone surrogate escape, overflowing number) | strict since 0.0.17 | strict (`serde_json`) | `proofDecodeRejects` ✓ | F24 |
 | Response contract (409 `code`) | `contract.ts` | emits `code` (`main.rs:252-260`) | none (`responses` vectors not added) | F15 |
 
 ---
@@ -945,15 +1004,16 @@ decode", because the Workers gateway imports it, and it publishes the vectors bo
 
 ### C.1 Coverage grade
 
-`vitest run` (Node environment) gives **80 tests passed** in 4 files: `challenge.test.ts` 11,
-`contract.test.ts` 3, `proof.test.ts` 13, `vectors.test.ts` 53 (one test case per vector). No coverage
+`vitest run` (Node environment) gives **101 tests passed** in 4 files after the 2026-10-10 fix wave
+(`challenge.test.ts` 12, `contract.test.ts` 3, `proof.test.ts` 22, `vectors.test.ts` 64, one test case per
+vector); it was 80 on 2026-10-09 (11 / 3 / 13 / 53). No coverage
 tool is configured (Suggestion S1).
 
 | Dimension | Assessment |
 | --- | --- |
 | Happy-path coverage | covered: challenge (camelCase, path prefix, loopback), message derivation (ownership and single-use), encode/decode round trip, `buildAccessProof` with and without digest, `parseGatewayError`, four real signature schemes verified by the Sui SDK |
-| Error-path coverage | covered: non-2xx, missing / empty / non-ASCII nonce, non-numeric / non-positive expiry, non-JSON, oversized (declared and streamed), redirect option, invalid host, http host, timeout, caller abort, malformed and oversized token, 16 decode-reject vectors, 13 message-reject vectors, malformed inputs (signer not called). **Missing:** a real 302 response (the option is asserted), `cache`/`credentials` options (F11), a bad address / expired challenge before the prompt (F14) |
-| Boundary coverage | covered: 4097-character token, 129-character nonce, 45-character digest, `0OIl` alphabet, 64-digit address. **Missing:** canonical-base64 negative vectors (F24), base58 decoded-length edges (F18) |
+| Error-path coverage | covered: non-2xx, missing / empty / non-ASCII nonce, non-numeric / non-positive expiry, non-JSON, oversized (declared and streamed), redirect option, invalid host, http host, timeout, caller abort, malformed and oversized token, 27 decode-reject vectors (field grammar plus the base64 / UTF-8 / JSON layers), 13 message-reject vectors, malformed inputs (signer not called). **Missing:** a real 302 response (the option is asserted), `cache`/`credentials` options (F11), a bad address / expired challenge before the prompt (F14) |
+| Boundary coverage | covered: 4097-character token, 129-character nonce, 45-character digest, `0OIl` alphabet, 64-digit address. **Missing:** base58 decoded-length edges (F18). The canonical-base64 negative vectors exist since 0.0.17 (F24) |
 | Security-relevant coverage | the published vectors pin the format with real signatures: 8 audience-mismatch cases (each bound field, plus v1), 8 negative signatures (high-S on both curves, non-canonical ed25519 `s`, wrong intent, truncated, multisig / zkLogin / passkey flags fail closed), ZIP-215. The Sui SDK verifier is the independent implementation |
 
 TS lens §C:
@@ -995,8 +1055,8 @@ field, and every implementation consumes the same published file — **holds**.
 - [x] `npm audit` gate in CI and publish — F7, F21
 - [x] every test project runs in CI — C.1
 - [x] `SECURITY.md` present and accurate — F16
-- [x] parity vectors (including negatives) cover the decoder's field grammar and every audience field —
-  F10, F16 (base64-layer strictness is the accepted residual F24)
+- [x] parity vectors (including negatives) cover the decoder's field grammar, the base64 / UTF-8 / JSON
+  layers and every audience field — F10, F16, F24 (0.0.17: 27 `proofDecodeRejects`)
 - [x] challenge fetch refuses redirects — F11 (cache mode left to default; gateways send no freshness
   headers)
 - [x] signed-challenge protocol versioned and audience-bound; negative vectors in every implementation
@@ -1010,9 +1070,10 @@ field, and every implementation consumes the same published file — **holds**.
   adoption is tracked in its audit)
 - [x] every fetch has a timeout — `challenge.ts:63-64`
 - [x] no raw `btoa`/`atob` on untrusted text — UTF-8 round trip on encode; ASCII contract on both sides
-  (F2). The base64 layer's strictness is F24.
-- [ ] no `as` at trust boundaries without an inline justification — `challenge.ts:77`, `proof.ts:161`,
-  `contract.ts:45` (F25, Suggestion S4); a pre-mainnet maintainer code edit
+  (F2). Decoding is strict: `atob` is followed by a canonical re-encode check and a fatal UTF-8 decode
+  (F24, 0.0.17).
+- [x] no `as` at trust boundaries without an inline justification — the three casts are type guards
+  (`isRecord`, `isConflictCode`) since 0.0.17; no `as` in `src/` except `as const` (F25, Suggestion S4)
 - [ ] external review — maintainer / after launch: `OPERATOR_TASKS.md`, "Funding, grants and an external
   audit — after launch"
 
@@ -1032,8 +1093,8 @@ field, and every implementation consumes the same published file — **holds**.
   - It is implemented here (client, and the Workers gateway via import) and in
     `nft-gate/gateway-rust/src/proof.rs`.
   - Drift is detected by `vectors.json`, generated and published here, asserted here with an independent
-    verifier, and consumed by both gateways. The decoder strictness the vectors miss is the base64 layer
-    (F24). The response side now has a defined contract but no vectors (F15).
+    verifier, and consumed by both gateways. Since 0.0.17 the vectors also pin the base64 / UTF-8 / JSON
+    layers (F24). The response side has a defined contract but no vectors (F15).
 - **On-chain-truth boundary:** the package decides nothing. The address is emitted raw and
   canonicalised by the gateways (F1). Single-use accounting is on-chain plus the gateway's
   redemption store.
@@ -1051,8 +1112,8 @@ field, and every implementation consumes the same published file — **holds**.
 ## Normative requirements (MUST / MUST NOT)
 
 1. MUST define one strict token field grammar, applied on encode and decode, mirrored in the Rust
-   gateway, with `proofDecodeRejects` vectors — **holds** (F10). The base64 layer is lenient —
-   **does not hold, accepted** (F24).
+   gateway, with `proofDecodeRejects` vectors — **holds** (F10), including the base64 / UTF-8 / JSON
+   layers since 0.0.17 (F24).
 2. MUST assert the shared conformance vectors in this package's own tests, from a single agreed home —
    **holds** (F16).
 3. MUST refuse redirects on the challenge fetch — **holds** (F11). MUST NOT cache the nonce — **holds in
@@ -1073,12 +1134,12 @@ TS lens:
 
 | ID | Holds? | Evidence |
 | --- | --- | --- |
-| TS-M1 | strict holds; three `as` casts lack an inline justification | F25, Suggestion S4 |
-| TS-M2 | holds for the token's fields and size, the challenge read and the field grammar; the base64/UTF-8 layer is lenient | F10, F12, F13, F24 |
+| TS-M1 | holds — strict, and no `as` in `src/` outside `as const` (type guards since 0.0.17) | F25 |
+| TS-M2 | holds for the token's fields and size, the challenge read, the field grammar and (since 0.0.17) the base64 / UTF-8 / JSON layers | F10, F12, F13, F24 |
 | TS-M3 | N/A (no amounts) | |
 | TS-M4 | holds | |
 | TS-M5 | holds — the timeout, `new URL` and the redirect policy exist | F11 |
-| TS-M6 | holds (the gateway URL is echoed in two error texts) | F23, F26 |
+| TS-M6 | holds (the gateway URL is no longer echoed in error texts, 0.0.17) | F23, F26 |
 | TS-M7 | holds | B.TS-1, B.TS-2 |
 | TS-M8 | holds | B.TS-3 |
 | TS-M9 | N/A (`@mysten/sui` is a dev dependency only; no runtime SDK) | B.1 |
@@ -1110,14 +1171,14 @@ AUTH lens:
   proptests for differential coverage.
 - **S3** MAY export `MAX_TOKEN_BYTES` (and the challenge cap) so gateways import the limits instead of
   restating them.
-- **S4** SHOULD add a one-line justification beside the three narrowing casts (TS-M1), or replace them
-  with a small type guard (F25).
+- **S4** (done 0.0.17) the three narrowing casts are type guards (TS-M1, F25).
 - **S5** MAY expose an `accessProofHeaders(token)` and `isRedeemedConflict(err)` helper (the rest of
   F15) so no consumer hand-writes `Bearer` or a message-regex fallback.
-- **S6** SHOULD add `npm pack --dry-run` with an asserted file list to Node CI, drop `--if-present`, and
-  add lint to the publish `verify` job (F19).
-- **S7** MAY add `"engines": { "node": ">=24" }`, align `AGENTS.md`, and fix the duplicated README
-  bullet (F17, F20).
+- **S6** SHOULD add `npm pack --dry-run` with an asserted file list to Node CI (F19). (Done in 0.0.17 /
+  `4cdf244`: `--if-present` dropped, lint in the publish `verify` job, build in Node CI. Still open: the
+  pack check.)
+- **S7** (done 0.0.17) `"engines": { "node": ">=24" }`, `AGENTS.md` aligned, duplicated README bullet
+  fixed (F17, F20).
 - **S8** MAY pass `cache: 'no-store'` and `credentials: 'omit'` in `fetchChallenge` (F11).
 
 ## Open questions
@@ -1142,8 +1203,14 @@ AUTH lens:
 - **OQ7** Should the response contract be part of this package's public API? (Decided 2026-10-08,
   release 0.0.16: **yes** — `contract.ts`; the helpers `isRedeemedConflict` and `accessProofHeaders` and
   `responses` vectors are not yet part of it — see F15.)
-- **OQ8** Should the lenient base64 / invalid-UTF-8 layer be made strict in both gateways (F24)? Open: a
-  maintainer decision, to be taken before the Rust gateway is deployed or at the pre-mainnet review.
+- **OQ8** Should the lenient base64 / invalid-UTF-8 layer be made strict in both gateways (F24)? (Decided
+  2026-10-10, release 0.0.17: **yes, strict** — this decoder is brought to the Rust decoder's decisions
+  (canonical padded base64, `trim()` at the ends only, strict UTF-8 without a BOM, serde_json's depth,
+  surrogate and number limits) and eleven `proofDecodeRejects` vectors pin it for both gateways. Reason:
+  the wire format is shared, the Rust side was already strict and is the stricter, so aligning the
+  lenient side removes the only divergence without touching the undeployed gateway or its tests, a
+  token this package emits is always canonical so no legitimate caller breaks, and a decoder that
+  refuses malformed framing narrows what an attacker can vary — see F24.)
 
 ## Risks
 
@@ -1152,8 +1219,9 @@ AUTH lens:
   gateway, gate and network, and the resulting proof is valid there for one request within the nonce TTL
   (and, in single-use mode, for the digest the victim chose to sign).
 - **Platform globals.** `fetch`, `atob` and `TextDecoder` semantics differ slightly across browsers,
-  Node and workerd. The field grammar removes the differences that decide access; the base64 layer is F24.
-  The runtime floor is F20.
+  Node and workerd. The field grammar removes the differences that decide access, and since 0.0.17 the
+  decoder no longer leans on `atob`'s forgiving mode or the default `TextDecoder` (F24). The runtime
+  floor is F20 (`engines.node` `>=24`).
 - **Coordinated releases.** Every wire change needs this package, both gateways, the vectors and
   walrus-client released together. Pre-v0.2 there is no compatibility window, so a partial rollout
   breaks uploads until all parts ship. (0.0.16 was rolled out this way on 2026-10-08/09.)
@@ -1197,18 +1265,36 @@ AUTH lens:
   - Section D: all gates ticked except the cast justification (F25) and external review (maintainer,
     `OPERATOR_TASKS.md`).
   - Pre-save consistency checklist run.
+- 2026-10-10 — Fix wave on `main` after `4cdf244` (release `0.0.17`, commit pending, not yet tagged or
+  published). Read: `src/`, `scripts/gen-vectors.mjs`, `gateway-rust/src/proof.rs` (read-only), the
+  Workers consumer's use of the decoder.
+  - Resolved: F24 (strict base64 / UTF-8 / JSON, OQ8 decided), F25 (type guards, no `as`), F26 (no URL
+    echo), F19 (build in Node CI, lint in the publish `verify` job; `--if-present` was already gone), F20
+    (`engines.node` `>=24`); F10 moves from MITIGATED to RESOLVED because its base64 residual is F24.
+    F17 stays MITIGATED: the README and `AGENTS.md` nits are fixed, the `walrus-relay` description is in
+    another repo. F11, F14, F15, F18 unchanged (F15's remainder is walrus-client adoption).
+  - New: eleven `proofDecodeRejects` vectors (16 → 27) in `vectors.json`. The Rust gateway needs no new
+    test (it consumes the array; its own `conformance_shared_vectors` passes unchanged on a scratch copy).
+  - Differential run: `proof.rs` compiled unchanged (`base64 0.22.1`, `serde_json 1.0.151`) against the
+    new decoder over about 140 hand-written cases and 90 000 mutated tokens: three more serde_json
+    refusals found and mirrored (depth 128, unpaired surrogate escape, overflowing number); 0
+    divergences after.
+  - Measured: vitest 101 passed (4 files); `tsc --noEmit`, `eslint .` and `check:vectors` clean;
+    `npm run build` clean; `npm audit` 0; `npm pack --dry-run` 15 files.
+  - Section D: only external review (maintainer, `OPERATOR_TASKS.md`) is unticked.
+  - Pre-save consistency checklist run.
 
 ## Pre-save consistency checklist (this pass)
 
-- [x] Section A ↔ findings — GAP/PARTLY rows cite F24, F14, F15; HOLDS rows cite resolved or positive ones.
+- [x] Section A ↔ findings — the PARTLY row cites F14 and the pending-adoption note F15; HOLDS rows cite resolved or positive ones (F24 closed in 0.0.17).
 - [x] Finding header ↔ body — every header disposition matches the body and the Status line counts (26
-  findings: 9 RESOLVED, 6 MITIGATED, 1 ADJUDICATED, 4 ACCEPTED-RISK, 1 DEFERRED, 5 Positive).
+  findings: 15 RESOLVED, 5 MITIGATED, 1 ADJUDICATED, 5 Positive; no ACCEPTED-RISK or DEFERRED).
 - [x] Template line: base + TS + SUI_CLIENT + AUTH with dates; WALRUS, VUE, IMG, OPS, PROXY, WORKERS, SEAL
   and PLATFORM not-triggered noted.
 - [x] Closing structure in order.
 - [x] Open questions: none deleted or renumbered. OQ3, OQ5, OQ6 and OQ7 now carry `(Decided …)` notes;
-  OQ8 is open.
+  OQ8 decided 2026-10-10.
 - [x] Section D ↔ dispositions.
 - [x] Executive summary reflects current dispositions.
-- [x] Counts and versions re-measured 2026-10-09.
+- [x] Counts and versions re-measured 2026-10-09 and 2026-10-10 (tests 101, vectors 27 decode rejects).
 - [x] Re-verification log entry added.
