@@ -23,7 +23,7 @@
   SLSA v1 provenance attestation on the registry (`dist.attestations.provenance.predicateType` =
   `https://slsa.dev/provenance/v1`, `gitHead` = `e114369`). Git tag `v0.0.16` is at `e114369`.
 - `main` is ahead of the tag and unreleased. The 2026-10-09 commits (`ff6256d` Dependabot config,
-  `ed876ba` dev-dependency lockfile bump) did not change `src/`. The 2026-10-10 fix wave (commit pending)
+  `ed876ba` dev-dependency lockfile bump) did not change `src/`. The 2026-10-10 fix wave (commit `f7abef3`)
   is **0.0.17**: strict base64 / UTF-8 / JSON decoding (F24), type guards in place of the three casts
   (F25), no URL echo in `gatewayOrigin` errors (F26), `engines`, CI build and lint (F19, F20), eleven new
   `proofDecodeRejects` vectors. It is not yet tagged or published; until it is, the consumers below run
@@ -44,7 +44,7 @@
   path**, and the message format it defines decides what a user's signature can be replayed for. A bypass
   still requires a gateway decision, so nothing here reaches High on its own.
 **Status:** re-verified 2026-10-09 at `ed876ba` (release `0.0.16`, tag `e114369`); fix wave 2026-10-10 on
-  top of it (release `0.0.17`, commit pending, unreleased). Of the 26 findings (F1–F26), 5 are Positive
+  top of it (release `0.0.17`, commit `f7abef3`, unreleased). Of the 26 findings (F1–F26), 5 are Positive
   and 21 carry a disposition: 15 RESOLVED, 5 MITIGATED, 1 ADJUDICATED. Nothing is ACCEPTED-RISK or
   DEFERRED. This supersedes the 2026-10-03 pass, which recorded findings only. The audit lives in the
   package (see *Location* below).
@@ -441,7 +441,7 @@ gateway; only the wallet display and the user noticing do (Risks, *Wallet displa
 ### F10 — `decodeAccessProof` accepts tokens the Rust gateway rejects, and vice versa
 
 **Severity:** Low   **Disposition:** RESOLVED (field grammar and digest typing in 0.0.16; the base64 and
-UTF-8 layer in 0.0.17, commit pending, tracked as F24)
+UTF-8 layer in 0.0.17, commit `f7abef3`, tracked as F24)
 **Where:** `src/proof.ts:192-214` (`requireProofShape`) and `:232-244` (`decodeAccessProof`) versus
 `nft-gate/gateway-rust/src/proof.rs:144-205`.
 
@@ -655,7 +655,7 @@ gateway's chain lookup is the authority.
 ### F19 — CI gaps: no build in Node CI, `--if-present` everywhere, no lint before publish
 
 **Severity:** Info   **Disposition:** RESOLVED (2026-10-10: the `--if-present` flags were already gone;
-Node CI now builds and the publish `verify` job lints; commit pending)
+Node CI now builds and the publish `verify` job lints; commit `f7abef3`)
 **Where (as recorded 2026-10-09):**
 
 - `.github/workflows/node-ci.yml` (`lint:js --if-present`; no `npm run build`).
@@ -682,7 +682,7 @@ and a lint step to `verify` are now done except the pack check (S6).
 ### F20 — Runtime floor for `AbortSignal.any` / `AbortSignal.timeout` is undeclared
 
 **Severity:** Info   **Disposition:** RESOLVED (0.0.17: `engines.node` `>=24`; the browser floor stays
-the `browserslist` query; commit pending)
+the `browserslist` query; commit `f7abef3`)
 **Where:** `src/challenge.ts:63-64`; `package.json` `browserslist` and (until 0.0.17) no `engines`.
 
 **Issue:** `AbortSignal.any` needs Chrome 116 / Firefox 124 / Safari 17.4 / Node 20.3, and
@@ -746,7 +746,7 @@ unless they set `engine-strict`).
 
 ### F24 — Base64 layer was lenient: unpadded, whitespace and invalid UTF-8 in unknown keys
 
-**Severity:** Low   **Disposition:** RESOLVED (0.0.17, commit pending; OQ8 decided: strict, in this decoder
+**Severity:** Low   **Disposition:** RESOLVED (0.0.17, commit `f7abef3`; OQ8 decided: strict, in this decoder
 and pinned by vectors both gateways consume)
 **Where:** `src/proof.ts:104-175` (`fromBase64`, `requireJsonLikeRust`) and `:232-244` (`decodeAccessProof`),
 versus `nft-gate/gateway-rust/src/proof.rs:157-160` (`BASE64_STANDARD.decode(token.trim())`, then
@@ -800,7 +800,7 @@ both gateways, and no change to the Rust source:
 
 ### F25 — Narrowing casts at trust boundaries carry no inline justification
 
-**Severity:** Info   **Disposition:** RESOLVED (0.0.17, commit pending: type guards replace the casts)
+**Severity:** Info   **Disposition:** RESOLVED (0.0.17, commit `f7abef3`: type guards replace the casts)
 **Where (as recorded 2026-10-09):** `src/challenge.ts:77` (`as Record<string, unknown>`), `src/proof.ts:161`
 (`as Record<string, unknown>`), `src/contract.ts:45` (`as GatewayConflictCode`).
 
@@ -821,7 +821,7 @@ an error, a non-string code); the decode paths are covered by the vectors and `t
 
 ### F26 — `gatewayOrigin` error messages echo the gateway string, including any userinfo
 
-**Severity:** Info   **Disposition:** RESOLVED (0.0.17, commit pending: the input is no longer echoed)
+**Severity:** Info   **Disposition:** RESOLVED (0.0.17, commit `f7abef3`: the input is no longer echoed)
 **Where (as recorded 2026-10-09):** `src/proof.ts:42-55` (`invalid gateway URL: ${gateway}`, `gateway URL
 must use https: ${gateway}`).
 
@@ -1265,7 +1265,7 @@ AUTH lens:
   - Section D: all gates ticked except the cast justification (F25) and external review (maintainer,
     `OPERATOR_TASKS.md`).
   - Pre-save consistency checklist run.
-- 2026-10-10 — Fix wave on `main` after `4cdf244` (release `0.0.17`, commit pending, not yet tagged or
+- 2026-10-10 — Fix wave on `main` after `4cdf244` (release `0.0.17`, commit `f7abef3`, not yet tagged or
   published). Read: `src/`, `scripts/gen-vectors.mjs`, `gateway-rust/src/proof.rs` (read-only), the
   Workers consumer's use of the decoder.
   - Resolved: F24 (strict base64 / UTF-8 / JSON, OQ8 decided), F25 (type guards, no `as`), F26 (no URL
